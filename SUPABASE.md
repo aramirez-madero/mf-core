@@ -2,14 +2,13 @@
 
 ## Objetivo
 
-Supabase sera la base en la nube para reemplazar gradualmente `localStorage`.
+Supabase se usara primero solo para el flujo que ya existe en el sistema:
 
-Primera etapa:
+- `generated_annexes`: anexos generados y pendientes de pasar a Control.
+- `control_records`: anexos confirmados dentro de Control.
 
-- `control_records`: registros confirmados en Control.
-- `generated_annexes`: anexos generados antes o despues de pasarlos a Control.
-- `master_records`: maestros internos.
-- `audit_actions`: trazabilidad.
+No se crean tablas para maestros, auditoria, usuarios, configuracion ni reportes todavia.
+Eso se agregara cuando el sistema realmente lo use.
 
 ## Crear proyecto
 
@@ -29,7 +28,7 @@ VITE_SUPABASE_ANON_KEY
 
 Los valores salen de Supabase en `Project Settings > API`.
 
-## Nota importante
+## Seguridad
 
 El esquema tiene RLS activado y permite acceso solo a usuarios autenticados.
-Antes de mover datos reales a Supabase, el sistema debe tener login o una capa backend.
+Antes de guardar datos reales desde la app publicada, falta conectar login o una capa backend.

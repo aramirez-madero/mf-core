@@ -1,47 +1,48 @@
 create extension if not exists "pgcrypto";
 
-create table if not exists public.control_records (
-  id uuid primary key default gen_random_uuid(),
-  control_id text unique,
-  estado_control text not null default 'Pendiente',
-  payload jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
 create table if not exists public.generated_annexes (
   id uuid primary key default gen_random_uuid(),
-  annex_id text unique,
-  control_record_id uuid references public.control_records(id) on delete set null,
+  local_id text not null unique,
   estado_control text not null default 'Pendiente de pasar a Control',
+  operacion text,
+  cliente text,
+  ruc_cliente text,
+  obligado text,
+  ruc_obligado text,
+  moneda text,
+  monto_neto_pago numeric,
+  fecha_generacion timestamptz,
   payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.master_records (
+create table if not exists public.control_records (
   id uuid primary key default gen_random_uuid(),
-  collection text not null,
-  external_id text,
-  estado text not null default 'Activo',
+  generated_annex_id uuid references public.generated_annexes(id) on delete set null,
+  local_id text not null unique,
+  estado_control text not null default 'En Control',
+  operacion text,
+  cliente text,
+  ruc_cliente text,
+  obligado text,
+  ruc_obligado text,
+  moneda text,
+  monto_neto_pago numeric,
+  fecha_pase_control timestamptz,
   payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (collection, external_id)
+  updated_at timestamptz not null default now()
 );
 
-create table if not exists public.audit_actions (
-  id uuid primary key default gen_random_uuid(),
-  entidad text not null,
-  entidad_id text,
-  accion text not null,
-  estado_anterior text,
-  estado_nuevo text,
-  detalle text,
-  usuario text,
-  payload jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
-);
+create index if not exists generated_annexes_estado_control_idx
+on public.generated_annexes (estado_control);
+
+create index if not exists generated_annexes_operacion_idx
+on public.generated_annexes (operacion);
+
+create index if not exists control_records_operacion_idx
+on public.control_records (operacion);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -53,65 +54,27 @@ begin
 end;
 $$;
 
-drop trigger if exists set_control_records_updated_at on public.control_records;
-create trigger set_control_records_updated_at
-before update on public.control_records
-for each row execute function public.set_updated_at();
-
 drop trigger if exists set_generated_annexes_updated_at on public.generated_annexes;
 create trigger set_generated_annexes_updated_at
 before update on public.generated_annexes
 for each row execute function public.set_updated_at();
 
-drop trigger if exists set_master_records_updated_at on public.master_records;
-create trigger set_master_records_updated_at
-before update on public.master_records
+drop trigger if exists set_control_records_updated_at on public.control_records;
+create trigger set_control_records_updated_at
+before update on public.control_records
 for each row execute function public.set_updated_at();
 
-alter table public.control_records enable row level security;
 alter table public.generated_annexes enable row level security;
-alter table public.master_records enable row level security;
-alter table public.audit_actions enable row level security;
+alter table public.control_records enable row level security;
 
-create policy "Authenticated users can read control records"
-on public.control_records for select
-to authenticated
-using (true);
-
-create policy "Authenticated users can write control records"
-on public.control_records for all
-to authenticated
-using (true)
-with check (true);
-
-create policy "Authenticated users can read generated annexes"
-on public.generated_annexes for select
-to authenticated
-using (true);
-
-create policy "Authenticated users can write generated annexes"
+create policy "Authenticated users can manage generated annexes"
 on public.generated_annexes for all
 to authenticated
 using (true)
 with check (true);
 
-create policy "Authenticated users can read master records"
-on public.master_records for select
-to authenticated
-using (true);
-
-create policy "Authenticated users can write master records"
-on public.master_records for all
+create policy "Authenticated users can manage control records"
+on public.control_records for all
 to authenticated
 using (true)
-with check (true);
-
-create policy "Authenticated users can read audit actions"
-on public.audit_actions for select
-to authenticated
-using (true);
-
-create policy "Authenticated users can insert audit actions"
-on public.audit_actions for insert
-to authenticated
 with check (true);
