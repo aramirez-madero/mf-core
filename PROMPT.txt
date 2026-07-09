@@ -1,0 +1,1003 @@
+Quiero construir un sistema llamado **MF Core** para Madero Factoring.
+
+MF Core no debe ser una herramienta aislada. Debe diseñarse como una **plataforma modular, escalable y trazable**, donde cada módulo pueda alimentar a otros módulos futuros.
+
+El primer módulo será un **Generador de Anexos y Control Histórico**, basado principalmente en el archivo exportado de **CAVALI**.
+
+El MVP inicial debe enfocarse en:
+
+1. Cargar el archivo Excel/CSV descargado de CAVALI.
+2. Leer la información base desde ese archivo.
+3. Cruzar la información con bases maestras internas.
+4. Aplicar reglas de validación.
+5. Aplicar la regla de **Participante Origen**.
+6. Generar uno de los 3 tipos de anexos existentes.
+7. Generar un Excel final con estructura similar a la hoja **HISTORICO** del archivo actual de control.
+8. Guardar los registros finales en una base llamada **Control**.
+9. Guardar historial, estado y versión de cada proceso.
+10. Dejar el sistema preparado para crecer luego hacia desembolsos, cobranzas, liquidaciones, tesorería, portal cliente, portal inversionista, documentos, reportes e integraciones.
+
+---
+
+# 1. Enfoque general del sistema
+
+La fuente principal de información será el archivo exportado desde **CAVALI**.
+
+A partir de ese archivo se debe generar:
+
+* La información necesaria para crear los anexos.
+* Un Excel final con hoja **HISTORICO**.
+* Registros en la tabla/base **Control**.
+* Trazabilidad completa del proceso.
+* Datos reutilizables para módulos futuros.
+
+Los PDF/XML originales de las facturas no se guardarán en MF Core, porque esa información ya está disponible en otro sistema. MF Core solo trabajará con la información necesaria para crear anexos, validar datos y registrar el resultado.
+
+El flujo general será:
+
+Archivo CAVALI
+↓
+MF Core lee y normaliza los datos
+↓
+MF Core cruza con bases maestras internas
+↓
+MF Core valida información
+↓
+MF Core genera anexo
+↓
+MF Core genera Excel tipo HISTORICO
+↓
+MF Core guarda registros en Control
+↓
+MF Core guarda historial y trazabilidad
+↓
+Otros módulos podrán reutilizar esa información
+
+---
+
+# 2. Principio principal de arquitectura
+
+Cada registro importante debe tener un identificador único para conectarse con otros módulos.
+
+Ejemplos:
+
+* `operacion_id`
+* `factura_id`
+* `cliente_id`
+* `adquirente_id`
+* `participante_origen_id`
+* `anexo_id`
+* `control_id`
+* `carga_id`
+* `documento_id`
+
+Estos IDs deben permitir que más adelante otros módulos puedan usar la misma información sin volver a cargarla.
+
+No construir una herramienta que solo genere Excel o anexos. Construir una base operativa central para Madero Factoring.
+
+---
+
+# 3. Módulos futuros que deben poder conectarse
+
+El diseño debe quedar preparado para módulos futuros como:
+
+* Desembolsos.
+* Tesorería.
+* Cobranzas.
+* Liquidaciones.
+* Portal cliente.
+* Portal inversionista.
+* Separación de facturas.
+* Documentos firmados.
+* Estados de cuenta.
+* Reportes gerenciales.
+* Auditoría.
+* Integraciones con correos.
+* Integraciones con Google Drive.
+* Integraciones con DocuSign, Keynua u otra solución de firma.
+
+Ejemplo de conexión entre módulos:
+
+* El módulo de anexos toma datos desde Control para generar documentos.
+* El módulo de desembolso toma el monto a desembolsar desde Control.
+* El módulo de cobranza toma la fecha de vencimiento desde Control.
+* El módulo de liquidación toma monto, tasa, fecha de desembolso y fecha de pago desde Control.
+* El portal cliente muestra el estado de su operación desde Control.
+* El portal inversionista podría mostrar facturas disponibles según datos de Control.
+* El dashboard gerencial resume operaciones, estados, montos y vencimientos desde Control.
+
+---
+
+# 4. Archivo CAVALI
+
+El sistema debe permitir cargar un archivo **CSV o Excel** exportado de CAVALI.
+
+El CSV puede venir separado por punto y coma `;`.
+
+El sistema debe leer campos como:
+
+* Participante Origen
+* Ruc Proveedor
+* Razón Social Proveedor
+* Ruc Adquirente
+* Razón Social Adquirente
+* Serie
+* Numeración
+* Código de Valor
+* Tipo de comprobante
+* Importe Neto a Pagar
+* Importe Neto a Pagar (Factura Negociable)
+* Monto bruto
+* Monto bruto (Comprobante de Pago)
+* IGV
+* Monto Neto
+* Moneda
+* Fecha de Emisión
+* Fecha de Vencimiento
+* Fecha de Pago
+* Fecha de Transferencia Contable
+* Respuesta de Adquirente
+* Fecha de Respuesta Adquirente
+* Estado
+* Estado SUNAT
+* Estado CPE SUNAT
+* Orden de compra
+* Descripción
+* Observaciones
+
+El sistema debe estar preparado para que algunas columnas puedan venir con nombres ligeramente distintos. Por eso, se debe crear una capa de normalización de columnas.
+
+---
+
+# 5. Normalización de datos
+
+Antes de cruzar información, el sistema debe normalizar:
+
+* RUC: quitar espacios, guiones y caracteres innecesarios.
+* Fechas: convertir a formato estándar `YYYY-MM-DD`.
+* Montos: convertir texto a número decimal.
+* Moneda: homologar valores como `S/`, `PEN`, `SOLES`, `USD`, `$`.
+* Serie: limpiar espacios.
+* Numeración: mantener ceros si corresponde.
+* Factura: construir con Serie + Numeración.
+* Razón social: limpiar dobles espacios y caracteres extraños.
+* Código de Participante Origen: convertir a texto o número limpio.
+
+Ejemplo:
+
+Si CAVALI trae:
+
+Serie: E001
+Numeración: 1613
+
+El campo Factura debe quedar:
+
+E001-1613
+
+Si el formato del HISTORICO requiere prefijo como `FA-`, dejarlo parametrizable.
+
+---
+
+# 6. Bases maestras internas
+
+El sistema debe tener bases maestras para cruzar y completar información.
+
+Crear o preparar estas tablas:
+
+## 6.1. maestro_proveedores
+
+Campos sugeridos:
+
+* id
+* ruc_proveedor
+* razon_social_cavali
+* razon_social_homologada
+* codigo_interno
+* estado
+* fecha_creacion
+* fecha_actualizacion
+
+Uso:
+
+El sistema debe cruzar por `Ruc Proveedor` del archivo CAVALI.
+Sirve para homologar nombres de clientes/proveedores.
+
+---
+
+## 6.2. maestro_adquirentes
+
+Campos sugeridos:
+
+* id
+* ruc_adquirente
+* razon_social_cavali
+* razon_social_homologada
+* codigo_adquirente
+* tasa_default
+* estado
+* fecha_creacion
+* fecha_actualizacion
+
+Uso:
+
+El sistema debe cruzar por `Ruc Adquirente` del archivo CAVALI.
+Sirve para obtener el `Código Obligado`, nombre homologado del obligado/adquirente y condiciones internas.
+
+---
+
+## 6.3. maestro_participantes_origen
+
+Campos sugeridos:
+
+* id
+* codigo_participante
+* nombre_participante
+* ruc_participante
+* direccion_participante
+* correo_participante
+* contacto_participante
+* estado
+* fecha_creacion
+* fecha_actualizacion
+
+Uso:
+
+Sirve para resolver la regla de **Participante Origen**.
+
+---
+
+## 6.4. maestro_fondos
+
+Campos sugeridos:
+
+* id
+* codigo_fondo
+* nombre_fondo
+* moneda
+* tasa_fondo
+* estado
+* fecha_creacion
+* fecha_actualizacion
+
+---
+
+## 6.5. maestro_rango_deuda
+
+Campos sugeridos:
+
+* id
+* rango
+* condicion
+* tasa
+* descripcion
+* estado
+
+---
+
+## 6.6. plantillas_anexos
+
+Campos sugeridos:
+
+* id
+* tipo_anexo
+* nombre_plantilla
+* version
+* ruta_archivo_plantilla
+* estado
+* fecha_creacion
+* fecha_actualizacion
+
+Deben existir 3 tipos de anexos:
+
+* Anexo Tipo 1
+* Anexo Tipo 2
+* Anexo Tipo 3
+
+Cada tipo de anexo debe tener su propia plantilla, campos obligatorios y reglas de generación.
+
+No se debe quemar toda la lógica de una sola plantilla en el código. Debe manejarse de forma modular.
+
+---
+
+# 7. Regla importante: Participante Origen
+
+El archivo de CAVALI tiene un campo llamado **Participante Origen**.
+
+La regla debe ser:
+
+## Caso 1: Participante Origen = 841
+
+Si **Participante Origen = 841**, significa que la operación es directa de Madero Factoring.
+
+Entonces:
+
+* En el anexo solo deben salir los datos del proveedor.
+* No debe agregarse información de otro participante externo.
+* En el HISTORICO, el campo `Originador` puede marcarse como `MF` o `Madero Factoring`.
+* El campo `requiere_datos_participante` debe ser `No`.
+
+## Caso 2: Participante Origen diferente de 841
+
+Si **Participante Origen ≠ 841**, significa que interviene otro participante/factor/originador externo.
+
+Entonces:
+
+* El sistema debe buscar ese código en `maestro_participantes_origen`.
+* En el anexo deben salir los datos del proveedor y también los datos del participante origen.
+* En el HISTORICO, el campo `Originador` debe salir según el participante encontrado en la base maestra.
+* El campo `requiere_datos_participante` debe ser `Sí`.
+
+## Validación obligatoria
+
+Si el código del Participante Origen es diferente de 841 y no existe en `maestro_participantes_origen`, el sistema NO debe permitir generar el anexo ni el registro final.
+
+Debe marcar el registro como observado con el mensaje:
+
+“Participante Origen no encontrado en maestro. Debe registrar este participante antes de generar el anexo.”
+
+---
+
+# 8. Cruces de información
+
+El sistema debe cruzar CAVALI con las bases maestras usando:
+
+## Proveedor
+
+Cruzar por:
+
+* Ruc Proveedor
+
+Resultado esperado:
+
+* Cliente
+* RUC Cliente
+* Nombre homologado del cliente/proveedor
+* Código interno del proveedor, si existe
+
+## Adquirente / Obligado
+
+Cruzar por:
+
+* Ruc Adquirente
+
+Resultado esperado:
+
+* Código Obligado
+* Obligado
+* RUC Obligado
+* Nombre homologado del adquirente
+* Tasa default, si aplica
+
+## Participante Origen
+
+Cruzar por:
+
+* Participante Origen
+
+Resultado esperado:
+
+* Originador
+* RUC del participante
+* Datos del participante para el anexo, si aplica
+
+## Factura
+
+Construir y validar usando:
+
+* Serie
+* Numeración
+* Ruc Proveedor
+* Ruc Adquirente
+* Monto
+* Moneda
+* Fecha de vencimiento
+
+---
+
+# 9. Estructura esperada del Excel final
+
+El sistema debe generar un Excel final con una hoja llamada **HISTORICO**, con una estructura similar al Excel actual “MADERO FACTORING - CONTROL_1.xlsx”.
+
+La hoja HISTORICO debe tener columnas como:
+
+* Originador
+* Fondo
+* Cliente + factoring / referidor
+* Cliente
+* RUC (Cliente)
+* Codigo Obligado
+* Obligado
+* RUC (Obligado)
+* Operación
+* Factura
+* Fecha de Desembolso
+* Fecha Vencimiento
+* Fecha de pago
+* Tasa
+* Estado
+* Margen cobertura
+* Moneda
+* Monto Neto de pago
+* Monto Financiado / Saldo de capital
+* Costo Bancario
+* % Comisión de desembolso
+* Comisiones
+* (+/-) Recálculo de intereses
+* Monto a desembolsar
+* Int. Compensatorio
+* Int. Moratorios
+* IGV
+* Deuda a la fecha
+* Interes operación
+* Plazo operación
+* Capital
+* Tasa Fondos
+* Interes fondos
+* Spread MF
+* Plazo x Capital
+* Tasa x Capital
+* A la venta
+
+El Excel generado debe respetar el orden de columnas de la hoja HISTORICO original.
+
+También debe aplicar formato moderno y legible:
+
+* Encabezados resaltados.
+* Filtros activados.
+* Columnas con ancho adecuado.
+* Fechas con formato fecha.
+* Montos con formato numérico.
+* Porcentajes con formato porcentaje.
+* Congelar fila de encabezados.
+* Hoja llamada exactamente `HISTORICO`.
+
+---
+
+# 10. Tabla Control
+
+Además de generar el Excel HISTORICO, el sistema debe guardar los registros en una tabla llamada `control`.
+
+Campos sugeridos:
+
+* id
+* originador
+* fondo
+* cliente_factoring_referidor
+* cliente
+* ruc_cliente
+* codigo_obligado
+* obligado
+* ruc_obligado
+* operacion
+* factura
+* fecha_desembolso
+* fecha_vencimiento
+* fecha_pago
+* tasa
+* estado
+* margen_cobertura
+* moneda
+* monto_neto_pago
+* monto_financiado_saldo_capital
+* costo_bancario
+* porcentaje_comision_desembolso
+* comisiones
+* recalculo_intereses
+* monto_desembolsar
+* interes_compensatorio
+* interes_moratorio
+* igv
+* deuda_a_la_fecha
+* interes_operacion
+* plazo_operacion
+* capital
+* tasa_fondos
+* interes_fondos
+* spread_mf
+* plazo_x_capital
+* tasa_x_capital
+* a_la_venta
+* participante_origen_codigo
+* participante_origen_nombre
+* participante_origen_ruc
+* requiere_datos_participante
+* codigo_valor_cavali
+* estado_cavali
+* respuesta_adquirente
+* estado_validacion
+* observaciones
+* link_anexo_word
+* link_anexo_pdf
+* version_anexo
+* fecha_carga
+* usuario_carga
+* fecha_generacion
+* usuario_generador
+
+La tabla Control debe ser la base para futuras etapas como desembolso, cobranza, liquidación y reportes.
+
+---
+
+# 11. Separación de tablas para escalabilidad
+
+Evitar una sola tabla gigante que mezcle todo.
+
+Separar:
+
+## Tablas maestras
+
+* `maestro_proveedores`
+* `maestro_adquirentes`
+* `maestro_participantes_origen`
+* `maestro_fondos`
+
+## Tablas operativas
+
+* `cargas_cavali`
+* `detalle_carga_cavali`
+* `operaciones`
+* `facturas`
+* `control`
+
+## Tablas documentales
+
+* `anexos_generados`
+* `documentos_generados`
+
+## Tablas de auditoría
+
+* `historial_acciones`
+* `historial_estados`
+
+## Tablas futuras
+
+* `desembolsos`
+* `cobranzas`
+* `liquidaciones`
+* `inversionistas`
+* `separaciones_facturas`
+* `portal_accesos`
+
+---
+
+# 12. Estados de validación
+
+Cada registro cargado desde CAVALI debe tener un estado de validación.
+
+Estados sugeridos:
+
+* Pendiente
+* Validado
+* Observado
+* Duplicado
+* Listo para generar
+* Generado
+
+Ejemplos de observaciones:
+
+* Proveedor no homologado.
+* Adquirente no encontrado en maestro.
+* Código Obligado no encontrado.
+* Participante Origen no encontrado en maestro.
+* Falta fecha de vencimiento.
+* Falta monto.
+* Falta moneda.
+* Factura duplicada en la carga.
+* Tipo de anexo no definido.
+
+---
+
+# 13. Estados reutilizables para módulos futuros
+
+Los registros deben tener estados que puedan ser usados por otros módulos.
+
+Ejemplo de estados generales:
+
+* Cargado
+* Observado
+* Validado
+* Listo para generar
+* Anexo generado
+* Pendiente de desembolso
+* Desembolsado
+* En cobranza
+* Cobrado
+* Liquidado
+* Cerrado
+* Archivado
+
+No todos los estados se usarán en el MVP, pero el diseño debe permitir agregarlos después sin romper la estructura.
+
+---
+
+# 14. Validaciones obligatorias
+
+Antes de generar el anexo y el Excel HISTORICO, validar:
+
+* Que exista RUC proveedor.
+* Que exista razón social proveedor.
+* Que el proveedor esté homologado o sea aceptado.
+* Que exista RUC adquirente.
+* Que exista razón social adquirente.
+* Que el adquirente exista en maestro_adquirentes.
+* Que exista código interno del adquirente.
+* Que exista serie.
+* Que exista numeración.
+* Que se pueda construir el campo Factura.
+* Que exista monto.
+* Que exista moneda.
+* Que exista fecha de vencimiento.
+* Que exista Participante Origen.
+* Que si Participante Origen es diferente de 841, exista en maestro_participantes_origen.
+* Que no existan facturas duplicadas en la misma carga, salvo que el usuario lo confirme.
+* Que el tipo de anexo esté definido.
+* Que los campos obligatorios para el anexo estén completos.
+
+---
+
+# 15. Vista previa
+
+Antes de guardar o generar archivos, mostrar una vista previa con:
+
+* RUC proveedor
+* Proveedor
+* RUC adquirente
+* Adquirente
+* Código obligado
+* Factura
+* Monto
+* Moneda
+* Fecha vencimiento
+* Participante Origen
+* Originador calculado
+* Estado de validación
+* Observación
+
+Solo permitir continuar cuando los registros estén en estado `Validado` o `Listo para generar`.
+
+Si hay observaciones, el sistema debe permitir identificar qué maestro falta completar.
+
+---
+
+# 16. Generación de anexos
+
+El sistema debe generar uno de los 3 tipos de anexos:
+
+* Anexo Tipo 1
+* Anexo Tipo 2
+* Anexo Tipo 3
+
+El tipo de anexo puede seleccionarse manualmente o calcularse según una regla configurable.
+
+Cada anexo debe generarse usando una plantilla DOCX con campos variables.
+
+El sistema debe reemplazar variables como:
+
+* {{originador}}
+* {{cliente}}
+* {{ruc_cliente}}
+* {{obligado}}
+* {{ruc_obligado}}
+* {{codigo_obligado}}
+* {{factura}}
+* {{fecha_vencimiento}}
+* {{moneda}}
+* {{monto_neto_pago}}
+* {{monto_financiado}}
+* {{tasa}}
+* {{margen_cobertura}}
+* {{participante_origen_nombre}}
+* {{participante_origen_ruc}}
+* {{codigo_valor_cavali}}
+
+Si Participante Origen = 841, los campos del participante externo no deben mostrarse o deben omitirse según corresponda en la plantilla.
+
+Si Participante Origen ≠ 841, los datos del participante externo deben mostrarse en el anexo.
+
+---
+
+# 17. Historial y trazabilidad obligatoria
+
+Toda acción importante debe registrarse.
+
+Crear tabla `historial_acciones` con campos:
+
+* id
+* entidad
+* entidad_id
+* accion
+* estado_anterior
+* estado_nuevo
+* usuario
+* fecha_hora
+* comentario
+
+Registrar como mínimo:
+
+* Quién cargó el archivo CAVALI.
+* Fecha y hora de carga.
+* Archivo cargado.
+* Cantidad de registros leídos.
+* Cantidad de registros válidos.
+* Cantidad de registros observados.
+* Cambios realizados en maestros.
+* Correcciones aplicadas.
+* Validaciones ejecutadas.
+* Generación del Excel HISTORICO.
+* Generación de anexos.
+* Cambios de estado.
+* Usuario responsable.
+* Observaciones.
+
+La trazabilidad debe permitir responder preguntas como:
+
+* ¿Quién cargó esta operación?
+* ¿De qué archivo CAVALI salió?
+* ¿Qué datos fueron modificados?
+* ¿Cuándo se generó el anexo?
+* ¿Qué versión del anexo se generó?
+* ¿Qué usuario validó la información?
+* ¿Por qué quedó observado un registro?
+* ¿Qué módulo usó esta información después?
+
+---
+
+# 18. Flujo del MVP
+
+El flujo esperado es:
+
+1. Usuario entra a MF Core.
+2. Usuario carga archivo CAVALI.
+3. MF Core lee el archivo.
+4. MF Core normaliza fechas, montos, moneda, RUC, serie y numeración.
+5. MF Core cruza proveedor por RUC.
+6. MF Core cruza adquirente por RUC.
+7. MF Core cruza Participante Origen con maestro_participantes_origen.
+8. MF Core aplica regla de Participante Origen = 841.
+9. MF Core arma los campos de la estructura HISTORICO.
+10. MF Core muestra vista previa de validación.
+11. Usuario corrige o completa maestros si hay observaciones.
+12. Usuario confirma registros válidos.
+13. MF Core genera el anexo correspondiente.
+14. MF Core genera Excel final con hoja HISTORICO.
+15. MF Core guarda registros en tabla Control.
+16. MF Core guarda historial de acción.
+17. MF Core muestra resumen final de la carga.
+
+---
+
+# 19. Resumen final de carga
+
+Después de procesar el archivo, mostrar un resumen:
+
+* Total de registros leídos.
+* Registros validados.
+* Registros observados.
+* Registros duplicados.
+* Registros generados.
+* Anexos generados.
+* Link de descarga del Excel HISTORICO.
+* Link o ruta de los anexos generados.
+
+---
+
+# 20. Arquitectura técnica recomendada
+
+El sistema debe estar preparado para escalar.
+
+Usar estructura modular:
+
+* Servicio de lectura de CAVALI.
+* Servicio de normalización.
+* Servicio de cruce con maestros.
+* Servicio de validación.
+* Servicio de generación de HISTORICO.
+* Servicio de generación de anexos.
+* Servicio de guardado en Control.
+* Servicio de historial.
+* Servicio de estados.
+* Servicio documental.
+
+No crear una sola función gigante.
+
+Separar la lógica en servicios, por ejemplo:
+
+* `cavaliParserService`
+* `normalizationService`
+* `masterDataService`
+* `validationService`
+* `historicoBuilderService`
+* `annexGeneratorService`
+* `controlService`
+* `auditService`
+* `documentService`
+* `workflowStateService`
+
+Más adelante se podrán agregar:
+
+* `disbursementService`
+* `collectionService`
+* `settlementService`
+* `investorPortalService`
+* `clientPortalService`
+* `notificationService`
+
+Cada módulo debe poder consultar información de módulos anteriores mediante IDs y relaciones.
+
+Por ejemplo:
+
+* Un anexo debe estar relacionado a una operación.
+* Una operación debe estar relacionada a una o varias facturas.
+* Una factura debe estar relacionada a un proveedor y un adquirente.
+* Una carga CAVALI debe estar relacionada a los registros que generó.
+* Un registro de Control debe poder conectarse con anexos, desembolsos, cobranzas y liquidaciones.
+
+---
+
+# 21. Reglas técnicas de escalabilidad
+
+Aplicar estas reglas:
+
+* No duplicar información innecesariamente.
+* Usar relaciones entre tablas.
+* Guardar IDs de referencia.
+* Guardar fecha de creación y actualización.
+* Guardar usuario creador y usuario modificador.
+* Mantener historial de cambios.
+* Separar lógica por servicios.
+* No crear funciones gigantes.
+* Diseñar cada módulo para que pueda ser consumido por otros módulos.
+* Mantener nombres de columnas claros.
+* Centralizar reglas de negocio.
+* Evitar lógica repetida en componentes visuales.
+* Documentar supuestos y reglas especiales.
+
+---
+
+# 22. Diseño UI/UX
+
+El sistema **MF Core** debe tener un diseño moderno, limpio, profesional y corporativo.
+
+La interfaz debe tomar como referencia visual los colores del archivo **Artboard 1.jpg**.
+
+Usar los colores de esa imagen como base para la identidad visual del sistema.
+
+El diseño debe ser:
+
+* Moderno.
+* Minimalista.
+* Corporativo.
+* Elegante.
+* Claro para usuarios internos.
+* Pensado como una plataforma SaaS empresarial.
+
+Aplicar la paleta de **Artboard 1.jpg** en:
+
+* Sidebar.
+* Header.
+* Botones principales.
+* Botones secundarios.
+* Tablas.
+* Badges de estado.
+* Cards.
+* Formularios.
+* Modales.
+* Alertas.
+* Dashboard.
+* Pantallas de carga de archivo.
+* Pantallas de vista previa.
+* Pantallas de validación.
+
+Priorizar:
+
+* Buena legibilidad.
+* Buen contraste.
+* Espaciado correcto.
+* Bordes suaves.
+* Tipografía limpia.
+* Jerarquía visual clara.
+* Tablas fáciles de leer.
+* Estados visuales claros.
+
+Colores semánticos sugeridos:
+
+* `primary`
+* `secondary`
+* `accent`
+* `success`
+* `warning`
+* `danger`
+* `info`
+* `background`
+* `surface`
+* `text`
+
+Si se usa Tailwind, definir la paleta en `tailwind.config.js`.
+
+Si se usa CSS global, definir variables como:
+
+* `--color-primary`
+* `--color-secondary`
+* `--color-accent`
+* `--color-success`
+* `--color-warning`
+* `--color-danger`
+* `--color-background`
+* `--color-surface`
+* `--color-text`
+
+No usar un diseño genérico. La interfaz debe verse moderna y alineada visualmente con la identidad del archivo **Artboard 1.jpg**.
+
+---
+
+# 23. Forma de trabajo con Codex
+
+Primero revisa la estructura actual del proyecto.
+
+Identifica:
+
+* Qué framework se está usando.
+* Qué carpetas existen.
+* Qué dependencias ya están instaladas.
+* Si existe conexión a Supabase.
+* Si existe configuración de estilos.
+* Si existe estructura de componentes.
+* Si existe backend o solo frontend.
+
+Luego propone los cambios antes de implementarlos.
+
+Trabaja de forma incremental:
+
+1. Crear estructura base.
+2. Crear tablas/modelos.
+3. Crear servicios.
+4. Crear carga de CAVALI.
+5. Crear normalización.
+6. Crear cruce con maestros.
+7. Crear validaciones.
+8. Crear vista previa.
+9. Crear generación de HISTORICO.
+10. Crear guardado en Control.
+11. Crear historial.
+12. Preparar generación de anexos.
+13. Aplicar diseño UI.
+
+No borrar código existente sin explicar.
+
+Antes de cambios grandes, explicar qué se va a modificar y por qué.
+
+---
+
+# 24. Importante
+
+No construir todo el sistema completo de una vez.
+
+Primero construir el MVP:
+
+* Carga de CAVALI.
+* Normalización.
+* Cruce con maestros.
+* Validación.
+* Vista previa.
+* Regla Participante Origen.
+* Generación de HISTORICO.
+* Guardado en Control.
+* Historial y trazabilidad.
+* Base preparada para generación de anexos.
+
+Luego avanzar con:
+
+* Generación de los 3 anexos.
+* Guardado de anexos.
+* Estados de envío/firma.
+* Desembolsos.
+* Cobranzas.
+* Liquidaciones.
+* Portal cliente.
+* Portal inversionista.
+
+Objetivo final:
+
+El MVP debe resolver la generación de HISTORICO y anexos, pero la arquitectura debe permitir que MF Core se convierta progresivamente en una plataforma integral para la gestión operativa de Madero Factoring.
+
+No construir solo para el problema actual. Construir el módulo actual como la primera pieza de una plataforma mayor.

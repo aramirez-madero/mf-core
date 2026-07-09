@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MF Core</title>
+    <link rel="icon" type="image/svg+xml" href="./assets/icons/mf-logo.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="./assets/logos/mf-logo.jpg" alt="MF Core" />
+          <div>
+            <strong>MF Core</strong>
+            <span>Madero Factoring</span>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <a class="nav-item active" href="/anexos" data-module="anexos">Anexos</a>
+          <a class="nav-item" href="/maestros" data-module="maestros">Maestros</a>
+          <a class="nav-item" href="/control" data-module="control">Control</a>
+          <a class="nav-item" href="/auditoria" data-module="auditoria">Auditoria</a>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="module-kicker">Documentos</p>
+            <h1 id="module-title">Anexos</h1>
+          </div>
+        </header>
+
+        <section class="module active" id="anexos">
+          <div class="subnav">
+            <button class="subnav-item active" data-annex-tab="generar" type="button">Generar</button>
+            <button class="subnav-item" data-annex-tab="generados" type="button">Anexos generados</button>
+          </div>
+
+          <div class="annex-tab active" id="annex-tab-generar">
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Paso 1</p>
+                <h3>Subir Excel o CSV de CAVALI</h3>
+              </div>
+              <label class="file-button">
+                Importar
+                <input id="file" type="file" accept=".csv,.xlsx,.xls" />
+              </label>
+              <div class="inline-actions">
+                <select id="export-preview-format" class="export-select" disabled>
+                  <option value="">Exportar</option>
+                  <option value="excel">Excel</option>
+                  <option value="csv">CSV</option>
+                </select>
+                <button class="primary" id="generate-annexes" disabled>Generar anexos</button>
+                <button class="danger" id="cancel-preview-import" type="button" disabled>Cancelar carga</button>
+                <button class="secondary" id="preview-annex-design" type="button">Ver ejemplo anexo</button>
+              </div>
+            </div>
+            <div class="annex-params" id="annex-params"></div>
+            <div class="summary compact-summary" id="summary"></div>
+          </div>
+
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Paso 2</p>
+                <h3>Validar registros para generacion</h3>
+              </div>
+              <span class="muted">Solo los registros listos se pueden generar</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Proveedor</th>
+                    <th>RUC proveedor</th>
+                    <th>Adquiriente</th>
+                    <th>Codigo adquiriente</th>
+                    <th>Factura</th>
+                    <th>Monto</th>
+                    <th>Moneda</th>
+                    <th>Vencimiento</th>
+                    <th>Participante</th>
+                    <th>Originador</th>
+                    <th>Estado</th>
+                    <th>Observacion</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="preview-table"></tbody>
+              </table>
+            </div>
+          </div>
+          </div>
+
+          <div class="annex-tab" id="annex-tab-generados">
+            <div class="panel">
+              <div class="section-title">
+                <div>
+                  <p class="eyebrow">Repositorio</p>
+                  <h3>Anexos generados</h3>
+                </div>
+                <div class="inline-actions annex-generated-actions">
+                  <input id="annex-generated-search" class="search-input" type="search" placeholder="Buscar anexo..." />
+                  <input id="annex-generated-date" type="date" />
+                  <select id="annex-generated-sort">
+                    <option value="fecha_desc">Mas recientes</option>
+                    <option value="fecha_asc">Mas antiguos</option>
+                    <option value="operacion_asc">Operacion A-Z</option>
+                    <option value="cliente_asc">Cliente A-Z</option>
+                  </select>
+                  <button class="secondary icon-only-button" id="clear-annex-generated-filters" type="button" title="Limpiar" aria-label="Limpiar">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4H3.5A9 9 0 1 0 12 3V1L8 4l4 3V5Zm-3 6h6v2H9v-2Z"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div id="annex-generated-editor"></div>
+            </div>
+          </div>
+
+        </section>
+
+        <section class="module" id="maestros">
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Datos base</p>
+                <h3>Maestros internos</h3>
+              </div>
+              <div class="inline-actions">
+                <select id="master-selector"></select>
+                <input id="master-search" class="search-input" type="search" placeholder="Buscar en maestro..." />
+                <button class="secondary icon-only-button" id="clear-master-filters" type="button" title="Limpiar" aria-label="Limpiar">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4H3.5A9 9 0 1 0 12 3V1L8 4l4 3V5Zm-3 6h6v2H9v-2Z"/></svg>
+                </button>
+                <label class="file-button">
+                  Importar
+                  <input id="master-file" type="file" accept=".csv,.xlsx,.xls" />
+                </label>
+                <select id="export-master-format" class="export-select">
+                  <option value="">Exportar</option>
+                  <option value="excel">Excel</option>
+                  <option value="csv">CSV</option>
+                </select>
+                <button class="primary icon-only-button" id="add-master" type="button" title="Agregar registro" aria-label="Agregar registro">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z"/></svg>
+                </button>
+              </div>
+            </div>
+            <div id="master-editor"></div>
+          </div>
+        </section>
+
+        <section class="module" id="control">
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Base operativa</p>
+                <h3>Control</h3>
+              </div>
+              <div class="inline-actions">
+                <select id="export-control-format" class="export-select">
+                  <option value="">Exportar</option>
+                  <option value="excel">Excel</option>
+                  <option value="csv">CSV</option>
+                </select>
+              </div>
+            </div>
+            <div id="control-editor"></div>
+          </div>
+        </section>
+
+        <section class="module" id="auditoria">
+          <div class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Trazabilidad</p>
+                <h3>Historial de acciones</h3>
+              </div>
+              <div class="inline-actions">
+                <input id="audit-search" class="search-input" type="search" placeholder="Buscar en auditoria..." />
+                <select id="audit-entity-filter">
+                  <option value="">Todas las entidades</option>
+                  <option value="cargas_cavali">Cargas CAVALI</option>
+                  <option value="maestros">Maestros</option>
+                  <option value="control">Control</option>
+                  <option value="crud">Cambios manuales</option>
+                </select>
+                <input id="audit-date-filter" type="date" />
+                <button class="secondary icon-only-button" id="clear-audit-filters" type="button" title="Limpiar" aria-label="Limpiar">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4H3.5A9 9 0 1 0 12 3V1L8 4l4 3V5Zm-3 6h6v2H9v-2Z"/></svg>
+                </button>
+              </div>
+            </div>
+            <div id="audit-editor"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="record-modal">
+      <form method="dialog" class="modal-card">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow" id="modal-kicker">Registro</p>
+            <h3 id="modal-title">Editar registro</h3>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Cerrar">x</button>
+        </div>
+        <div id="modal-fields" class="form-grid"></div>
+        <menu class="modal-actions">
+          <button class="secondary" value="cancel">Cancelar</button>
+          <button class="primary" id="modal-save" value="default">Guardar</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="import-modal">
+      <form method="dialog" class="modal-card">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Importacion</p>
+            <h3 id="import-title">Confirmar importacion</h3>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Cerrar">x</button>
+        </div>
+        <div id="import-summary" class="import-summary"></div>
+        <div id="import-updates" class="import-updates"></div>
+        <menu class="modal-actions">
+          <button class="secondary" id="import-cancel" value="cancel">Cancelar</button>
+          <button class="primary" id="import-confirm" value="default">Confirmar</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="error-modal">
+      <form method="dialog" class="modal-card">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow" id="error-kicker">Error</p>
+            <h3 id="error-title">No se pudo completar la accion</h3>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Cerrar">x</button>
+        </div>
+        <div class="summary" id="error-message"></div>
+        <menu class="modal-actions">
+          <button class="primary" value="default">Entendido</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
