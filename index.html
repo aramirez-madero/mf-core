@@ -33,7 +33,22 @@
             <p class="eyebrow" id="module-kicker">Documentos</p>
             <h1 id="module-title">Anexos</h1>
           </div>
+          <div class="auth-panel" id="auth-panel">
+            <span id="auth-status">Sin sesion</span>
+            <input id="auth-email" type="email" placeholder="Correo" autocomplete="username" />
+            <input id="auth-password" type="password" placeholder="Clave" autocomplete="current-password" />
+            <button class="secondary" id="auth-login" type="button">Ingresar</button>
+            <button class="secondary" id="auth-logout" type="button" hidden>Salir</button>
+          </div>
         </header>
+
+        <section class="auth-required" id="auth-required">
+          <div class="panel auth-required-panel">
+            <p class="eyebrow">Acceso seguro</p>
+            <h3>Inicia sesion para usar MF Core</h3>
+            <p>Los datos de Maestros, Anexos, Control, Auditoria y Trazabilidad estan protegidos con Supabase Auth y RLS.</p>
+          </div>
+        </section>
 
         <section class="module active" id="anexos">
           <div class="subnav">

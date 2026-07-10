@@ -1,3 +1,10 @@
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+let currentSession = null;
+
 const STORAGE = {
   master: 'mf_core_master_data_v2',
   control: 'mf_core_control_records_v2',
@@ -230,9 +237,9 @@ window.addEventListener('unhandledrejection', (event) => {
   showErrorDialog('Error inesperado', event.reason?.message || String(event.reason || 'Ocurrio un error inesperado.'));
 });
 
-boot();
+void boot();
 
-function boot() {
+async function boot() {
   window.addEventListener('popstate', applyRouteFromLocation);
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', (event) => {
     event.preventDefault();
@@ -315,6 +322,8 @@ function boot() {
     $('annex-generated-sort').value = 'fecha_desc';
     renderGeneratedAnnexes();
   });
+  $('auth-login').addEventListener('click', signIn);
+  $('auth-logout').addEventListener('click', signOut);
   $('add-master').addEventListener('click', () => openRecordModal('master', state.activeMaster, null));
   $('export-control-format').addEventListener('change', (event) => {
     if (!event.target.value) return;
@@ -329,6 +338,8 @@ function boot() {
     renderMasters();
   });
   seedMasterSelector();
+  await initializeAuth();
+  await loadSupabaseState();
   applyRouteFromLocation({ replace: true });
   initializeCounters();
   handleStartupActions();
@@ -402,6 +413,87 @@ function switchAnnexTab(tab, options = {}) {
   if (state.module === 'anexos' && options.updateRoute !== false) pushRoute('anexos', tab);
 }
 
+async function initializeAuth() {
+  if (!supabaseReady()) {
+    updateAuthUi();
+    return;
+  }
+  const { data } = await supabase.auth.getSession();
+  currentSession = data.session;
+  if (!currentSession) clearSensitiveLocalState();
+  updateAuthUi();
+  supabase.auth.onAuthStateChange(async (_event, session) => {
+    currentSession = session;
+    updateAuthUi();
+    if (session) {
+      await loadSupabaseState();
+      renderAll();
+    }
+  });
+}
+
+async function signIn() {
+  if (!supabaseReady()) {
+    showErrorDialog('Supabase no configurado', 'Revisa VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el archivo .env.');
+    return;
+  }
+  const email = $('auth-email').value.trim();
+  const password = $('auth-password').value;
+  if (!email || !password) {
+    showErrorDialog('Faltan credenciales', 'Ingresa correo y clave para conectar con Supabase.');
+    return;
+  }
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    showErrorDialog('No se pudo iniciar sesion', error.message);
+    return;
+  }
+  currentSession = data.session;
+  $('auth-password').value = '';
+  updateAuthUi();
+  await loadSupabaseState();
+  renderAll();
+}
+
+async function signOut() {
+  if (!supabaseReady()) return;
+  await supabase.auth.signOut();
+  currentSession = null;
+  clearSensitiveLocalState();
+  updateAuthUi();
+  renderAll();
+}
+
+function updateAuthUi() {
+  const email = currentSession?.user?.email || '';
+  document.body.classList.toggle('auth-locked', supabaseReady() && !email);
+  $('auth-status').textContent = supabaseReady()
+    ? email || 'Sin sesion Supabase'
+    : 'Supabase sin configurar';
+  $('auth-email').hidden = Boolean(email);
+  $('auth-password').hidden = Boolean(email);
+  $('auth-login').hidden = Boolean(email);
+  $('auth-logout').hidden = !email;
+}
+
+function currentUserName() {
+  return currentSession?.user?.email || 'usuario.local';
+}
+
+function currentUserId() {
+  return currentSession?.user?.id || null;
+}
+
+function clearSensitiveLocalState() {
+  state.masterData = normalizeMasterData(DEFAULT_MASTER);
+  state.previewRows = [];
+  state.controlRows = [];
+  state.annexRows = [];
+  state.auditRows = [];
+  state.annexParams = {};
+  [STORAGE.master, STORAGE.preview, STORAGE.control, STORAGE.annexes, STORAGE.audit, STORAGE.annexParams].forEach((key) => localStorage.removeItem(key));
+}
+
 async function handleMasterFile(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -417,6 +509,17 @@ async function handleMasterFile(event) {
 
     state.masterData[view.collection] = finalResult.rows;
     save(STORAGE.master, state.masterData);
+    persistImportedLoadToSupabase({
+      modulo: 'maestros',
+      tipo_maestro: view.collection,
+      nombre_archivo: file.name,
+      cantidad_registros: imported.length,
+      cantidad_creados: finalResult.created.length,
+      cantidad_actualizados: finalResult.updated.length,
+      cantidad_omitidos: finalResult.skipped.length,
+      detalle: `Existentes no actualizados: ${finalResult.duplicates.length}`,
+      datos_originales: rows.slice(0, 100),
+    });
     appendAudit(
       'maestros',
       view.collection,
@@ -696,6 +799,17 @@ async function handleFile(event) {
     const rawRows = await parseFile(file);
     state.previewRows = processRows(rawRows, file.name);
     save(STORAGE.preview, state.previewRows);
+    persistImportedLoadToSupabase({
+      modulo: 'cargas_cavali',
+      tipo_maestro: null,
+      nombre_archivo: file.name,
+      cantidad_registros: state.previewRows.length,
+      cantidad_creados: state.previewRows.length,
+      cantidad_actualizados: 0,
+      cantidad_omitidos: 0,
+      detalle: 'Carga CAVALI procesada para validacion previa a anexos.',
+      datos_originales: rawRows.slice(0, 100),
+    });
     appendAudit('cargas_cavali', crypto.randomUUID(), 'Carga CAVALI procesada', '', 'Validacion ejecutada', `${file.name}: ${state.previewRows.length} registros leidos.`);
     $('summary').textContent = `Carga procesada: ${state.previewRows.length} registros desde ${file.name}. Revisa observaciones antes de generar.`;
     renderAll();
@@ -2513,7 +2627,7 @@ function persistCollection(type) {
 }
 
 function appendAudit(entidad, entidadId, accion, estadoAnterior, estadoNuevo, comentario, registro = '') {
-  state.auditRows.unshift({
+  const row = {
     id: crypto.randomUUID(),
     entidad,
     entidad_id: entidadId,
@@ -2521,12 +2635,26 @@ function appendAudit(entidad, entidadId, accion, estadoAnterior, estadoNuevo, co
     registro,
     estado_anterior: estadoAnterior,
     estado_nuevo: estadoNuevo,
-    usuario: 'usuario.local',
+    usuario: currentUserName(),
+    usuario_id: currentUserId(),
     fecha_hora: limaTimestamp(),
     comentario,
     detalle: comentario,
-  });
+  };
+  state.auditRows.unshift(row);
   save(STORAGE.audit, state.auditRows);
+  persistAuditToSupabase(row);
+  persistTraceToSupabase({
+    entidad,
+    id_local: entidadId,
+    accion,
+    estado_anterior: estadoAnterior,
+    estado_nuevo: estadoNuevo,
+    usuario_id: currentUserId(),
+    usuario_nombre: currentUserName(),
+    detalle: comentario,
+    datos_nuevos: row,
+  });
 }
 
 function resetDemo() {
@@ -2765,6 +2893,284 @@ function load(key, fallback) {
 
 function save(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
+  persistStorageToSupabase(key, value);
+}
+
+function supabaseReady() {
+  return Boolean(supabase);
+}
+
+function persistStorageToSupabase(key, value) {
+  if (!supabaseReady() || !currentSession) return;
+  if (key === STORAGE.master) void persistMastersToSupabase(value);
+  if (key === STORAGE.annexes) void persistAnnexesToSupabase(value);
+  if (key === STORAGE.control) void persistControlToSupabase(value);
+  if (key === STORAGE.audit) void persistAuditsToSupabase(value);
+}
+
+async function safeSupabaseWrite(label, operation) {
+  if (!supabaseReady() || !currentSession) return;
+  try {
+    const { error } = await operation();
+    if (error) throw error;
+  } catch (error) {
+    console.warn(`Supabase no pudo guardar ${label}:`, error.message || error);
+  }
+}
+
+async function safeSupabaseRead(label, operation) {
+  if (!supabaseReady() || !currentSession) return [];
+  try {
+    const { data, error } = await operation();
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.warn(`Supabase no pudo leer ${label}:`, error.message || error);
+    return [];
+  }
+}
+
+function rowData(row) {
+  return structuredClone(row || {});
+}
+
+function mapAdquirienteToDb(row) {
+  return {
+    id_local: row.id,
+    codigo: row.codigo || row.id,
+    razon_social: row.razon_social || '',
+    ruc: normalizeRuc(row.ruc),
+    estado: normalizeEstado(row.estado),
+    datos_completos: rowData(row),
+  };
+}
+
+function mapProveedorParticipanteToDb(row) {
+  return {
+    id_local: row.id,
+    codigo_cavali: row.codigo_cavali || null,
+    codigo_contrato: normalizeContractCode(row.codigo_contrato),
+    ruc: normalizeRuc(row.ruc),
+    razon_social: row.razon_social || '',
+    representante_legal: row.representante_legal || null,
+    tipo_documento: row.tipo_documento || 'DNI',
+    nro_documento: row.nro_documento || null,
+    cargo: row.cargo || null,
+    referidor_codigo: row.referidor_id || null,
+    estado: normalizeEstado(row.estado),
+    datos_completos: rowData(row),
+  };
+}
+
+function mapReferidorToDb(row) {
+  return {
+    id_local: row.id,
+    codigo: row.id,
+    nombre: row.nombre || '',
+    tipo_documento: row.tipo_documento || 'DNI',
+    nro_documento: row.nro_documento || null,
+    estado: normalizeEstado(row.estado),
+    datos_completos: rowData(row),
+  };
+}
+
+function mapPlantillaToDb(row) {
+  return {
+    id_local: row.id,
+    tipo_anexo: row.tipo_anexo || '',
+    version: row.version || 'v1',
+    ruta_archivo_plantilla: row.ruta_archivo_plantilla || null,
+    estado: normalizeEstado(row.estado),
+    datos_completos: rowData(row),
+  };
+}
+
+function mapAnnexToDb(row) {
+  return {
+    id_local: row.id,
+    estado_control: row.estado_control || 'Pendiente de pasar a Control',
+    operacion: row.operacion || null,
+    cliente: row.cliente || null,
+    ruc_cliente: row.ruc_cliente || null,
+    obligado: row.obligado || null,
+    ruc_obligado: row.ruc_obligado || null,
+    moneda: row.moneda || null,
+    monto_neto_pago: Number(row.monto_neto_pago) || null,
+    fecha_generacion: row.fecha_generacion || null,
+    datos_completos: rowData(row),
+  };
+}
+
+function mapControlToDb(row) {
+  return {
+    id_local: row.id,
+    estado_control: row.estado_control || 'En Control',
+    operacion: row.operacion || null,
+    cliente: row.cliente || null,
+    ruc_cliente: row.ruc_cliente || null,
+    obligado: row.obligado || null,
+    ruc_obligado: row.ruc_obligado || null,
+    moneda: row.moneda || null,
+    monto_neto_pago: Number(row.monto_neto_pago) || null,
+    fecha_pase_control: row.fecha_pase_control || null,
+    datos_completos: rowData(row),
+  };
+}
+
+function mapAuditToDb(row) {
+  return {
+    id_local: row.id,
+    entidad: row.entidad || 'manual',
+    entidad_id: row.entidad_id || null,
+    accion: row.accion || '',
+    registro: row.registro || null,
+    estado_anterior: row.estado_anterior || null,
+    estado_nuevo: row.estado_nuevo || null,
+    detalle: row.detalle || row.comentario || null,
+    comentario: row.comentario || null,
+    usuario_id: row.usuario_id || currentUserId(),
+    usuario_nombre: row.usuario || row.usuario_nombre || currentUserName(),
+    fecha_hora: row.fecha_hora || new Date().toISOString(),
+    datos_completos: rowData(row),
+  };
+}
+
+async function persistRows(table, rows, mapper, label, onConflict = 'id_local') {
+  const payload = (rows || []).map(mapper).filter((row) => row.id_local);
+  if (!payload.length) return;
+  await safeSupabaseWrite(label, () => supabase.from(table).upsert(payload, { onConflict }));
+}
+
+async function persistMastersToSupabase(masterData) {
+  await Promise.all([
+    persistRows('adquirientes', masterData?.adquirentes || [], mapAdquirienteToDb, 'adquirientes'),
+    persistRows('proveedores_participantes', masterData?.proveedoresParticipantes || [], mapProveedorParticipanteToDb, 'proveedores participantes'),
+    persistRows('referidores', masterData?.referidores || [], mapReferidorToDb, 'referidores'),
+    persistRows('plantillas_anexos', masterData?.plantillasAnexos || [], mapPlantillaToDb, 'plantillas de anexos'),
+  ]);
+}
+
+async function persistAnnexesToSupabase(rows) {
+  await persistRows('anexos_generados', rows, mapAnnexToDb, 'anexos generados');
+}
+
+async function persistControlToSupabase(rows) {
+  await persistRows('registros_control', rows, mapControlToDb, 'registros de control');
+}
+
+async function persistAuditsToSupabase(rows) {
+  await persistRows('auditoria', rows, mapAuditToDb, 'auditoria');
+}
+
+async function persistAuditToSupabase(row) {
+  await persistRows('auditoria', [row], mapAuditToDb, 'auditoria');
+}
+
+async function persistTraceToSupabase(row) {
+  await safeSupabaseWrite('trazabilidad', () => supabase.from('trazabilidad').insert({
+    entidad: row.entidad || 'manual',
+    id_local: row.id_local || null,
+    accion: row.accion || '',
+    estado_anterior: row.estado_anterior || null,
+    estado_nuevo: row.estado_nuevo || null,
+    usuario_id: row.usuario_id || currentUserId(),
+    usuario_nombre: row.usuario_nombre || currentUserName(),
+    detalle: row.detalle || null,
+    datos_anteriores: row.datos_anteriores || null,
+    datos_nuevos: row.datos_nuevos || null,
+  }));
+}
+
+async function persistImportedLoadToSupabase(load) {
+  await safeSupabaseWrite('cargas importadas', () => supabase.from('cargas_importadas').insert({
+    modulo: load.modulo,
+    tipo_maestro: load.tipo_maestro || null,
+    nombre_archivo: load.nombre_archivo || null,
+    cantidad_registros: load.cantidad_registros || 0,
+    cantidad_creados: load.cantidad_creados || 0,
+    cantidad_actualizados: load.cantidad_actualizados || 0,
+    cantidad_omitidos: load.cantidad_omitidos || 0,
+    usuario_id: currentUserId(),
+    usuario_nombre: currentUserName(),
+    estado: 'Procesado',
+    detalle: load.detalle || null,
+    datos_originales: load.datos_originales || null,
+  }));
+  await persistTraceToSupabase({
+    entidad: load.modulo,
+    id_local: load.nombre_archivo,
+    accion: 'Importacion de archivo',
+    estado_anterior: '',
+    estado_nuevo: 'Procesado',
+    usuario_nombre: 'usuario.local',
+    detalle: `${load.nombre_archivo || 'Archivo'}: ${load.cantidad_registros || 0} registros procesados.`,
+    datos_nuevos: load,
+  });
+}
+
+function fromDatosCompletos(row) {
+  return row?.datos_completos && Object.keys(row.datos_completos).length
+    ? row.datos_completos
+    : row;
+}
+
+async function loadSupabaseState() {
+  if (!supabaseReady() || !currentSession) return;
+
+  const [
+    adquirientes,
+    proveedoresParticipantes,
+    referidores,
+    plantillasAnexos,
+    anexosGenerados,
+    registrosControl,
+    auditoria,
+  ] = await Promise.all([
+    safeSupabaseRead('adquirientes', () => supabase.from('adquirientes').select('*').order('creado_en', { ascending: false })),
+    safeSupabaseRead('proveedores participantes', () => supabase.from('proveedores_participantes').select('*').order('creado_en', { ascending: false })),
+    safeSupabaseRead('referidores', () => supabase.from('referidores').select('*').order('creado_en', { ascending: false })),
+    safeSupabaseRead('plantillas de anexos', () => supabase.from('plantillas_anexos').select('*').order('creado_en', { ascending: false })),
+    safeSupabaseRead('anexos generados', () => supabase.from('anexos_generados').select('*').order('creado_en', { ascending: false })),
+    safeSupabaseRead('registros de control', () => supabase.from('registros_control').select('*').order('creado_en', { ascending: false })),
+    safeSupabaseRead('auditoria', () => supabase.from('auditoria').select('*').order('fecha_hora', { ascending: false })),
+  ]);
+
+  const hasRemoteMasters = adquirientes.length || proveedoresParticipantes.length || referidores.length || plantillasAnexos.length;
+  const hasRemoteOperations = anexosGenerados.length || registrosControl.length || auditoria.length;
+
+  if (hasRemoteMasters) {
+    state.masterData = normalizeMasterData({
+      adquirentes: adquirientes.map(fromDatosCompletos),
+      proveedoresParticipantes: proveedoresParticipantes.map(fromDatosCompletos),
+      referidores: referidores.map(fromDatosCompletos),
+      plantillasAnexos: plantillasAnexos.map(fromDatosCompletos),
+    });
+    localStorage.setItem(STORAGE.master, JSON.stringify(state.masterData));
+  }
+
+  if (anexosGenerados.length) {
+    state.annexRows = anexosGenerados.map(fromDatosCompletos);
+    localStorage.setItem(STORAGE.annexes, JSON.stringify(state.annexRows));
+  }
+
+  if (registrosControl.length) {
+    state.controlRows = registrosControl.map(fromDatosCompletos);
+    localStorage.setItem(STORAGE.control, JSON.stringify(state.controlRows));
+  }
+
+  if (auditoria.length) {
+    state.auditRows = auditoria.map((row) => ({ ...fromDatosCompletos(row), id: row.id_local || fromDatosCompletos(row).id }));
+    localStorage.setItem(STORAGE.audit, JSON.stringify(state.auditRows));
+  }
+
+  if (!hasRemoteMasters && !hasRemoteOperations) {
+    await Promise.all([
+      persistMastersToSupabase(state.masterData),
+      persistAnnexesToSupabase(state.annexRows),
+      persistControlToSupabase(state.controlRows),
+      persistAuditsToSupabase(state.auditRows),
+    ]);
+  }
 }
 
 function badge(status) {

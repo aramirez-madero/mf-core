@@ -1,8 +1,8 @@
 create extension if not exists "pgcrypto";
 
-create table if not exists public.generated_annexes (
+create table if not exists public.anexos_generados (
   id uuid primary key default gen_random_uuid(),
-  local_id text not null unique,
+  id_local text not null unique,
   estado_control text not null default 'Pendiente de pasar a Control',
   operacion text,
   cliente text,
@@ -12,15 +12,15 @@ create table if not exists public.generated_annexes (
   moneda text,
   monto_neto_pago numeric,
   fecha_generacion timestamptz,
-  payload jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  datos_completos jsonb not null default '{}'::jsonb,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now()
 );
 
-create table if not exists public.control_records (
+create table if not exists public.registros_control (
   id uuid primary key default gen_random_uuid(),
-  generated_annex_id uuid references public.generated_annexes(id) on delete set null,
-  local_id text not null unique,
+  anexo_generado_id uuid references public.anexos_generados(id) on delete set null,
+  id_local text not null unique,
   estado_control text not null default 'En Control',
   operacion text,
   cliente text,
@@ -30,51 +30,286 @@ create table if not exists public.control_records (
   moneda text,
   monto_neto_pago numeric,
   fecha_pase_control timestamptz,
-  payload jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  datos_completos jsonb not null default '{}'::jsonb,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now()
 );
 
-create index if not exists generated_annexes_estado_control_idx
-on public.generated_annexes (estado_control);
+create table if not exists public.adquirientes (
+  id uuid primary key default gen_random_uuid(),
+  id_local text unique,
+  codigo text not null unique,
+  razon_social text not null,
+  ruc text not null unique,
+  estado text not null default 'Activo',
+  datos_completos jsonb not null default '{}'::jsonb,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now()
+);
 
-create index if not exists generated_annexes_operacion_idx
-on public.generated_annexes (operacion);
+create table if not exists public.referidores (
+  id uuid primary key default gen_random_uuid(),
+  id_local text unique,
+  codigo text not null unique,
+  nombre text not null unique,
+  tipo_documento text not null default 'DNI',
+  nro_documento text,
+  estado text not null default 'Activo',
+  datos_completos jsonb not null default '{}'::jsonb,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now()
+);
 
-create index if not exists control_records_operacion_idx
-on public.control_records (operacion);
+create table if not exists public.proveedores_participantes (
+  id uuid primary key default gen_random_uuid(),
+  id_local text unique,
+  codigo_cavali text,
+  codigo_contrato text not null unique,
+  ruc text not null unique,
+  razon_social text not null,
+  representante_legal text,
+  tipo_documento text not null default 'DNI',
+  nro_documento text,
+  cargo text,
+  referidor_codigo text,
+  estado text not null default 'Activo',
+  datos_completos jsonb not null default '{}'::jsonb,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now()
+);
 
-create or replace function public.set_updated_at()
+create table if not exists public.plantillas_anexos (
+  id uuid primary key default gen_random_uuid(),
+  id_local text unique,
+  tipo_anexo text not null,
+  version text not null default 'v1',
+  ruta_archivo_plantilla text,
+  estado text not null default 'Activo',
+  datos_completos jsonb not null default '{}'::jsonb,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now(),
+  unique (tipo_anexo, version)
+);
+
+create table if not exists public.cargas_importadas (
+  id uuid primary key default gen_random_uuid(),
+  modulo text not null,
+  tipo_maestro text,
+  nombre_archivo text,
+  hash_archivo text,
+  cantidad_registros integer not null default 0,
+  cantidad_creados integer not null default 0,
+  cantidad_actualizados integer not null default 0,
+  cantidad_omitidos integer not null default 0,
+  usuario_id uuid,
+  usuario_nombre text,
+  estado text not null default 'Procesado',
+  detalle text,
+  datos_originales jsonb,
+  creado_en timestamptz not null default now()
+);
+
+create table if not exists public.auditoria (
+  id uuid primary key default gen_random_uuid(),
+  id_local text unique,
+  entidad text not null,
+  entidad_id text,
+  accion text not null,
+  registro text,
+  estado_anterior text,
+  estado_nuevo text,
+  detalle text,
+  comentario text,
+  usuario_id uuid,
+  usuario_nombre text not null default 'usuario.local',
+  fecha_hora timestamptz not null default now(),
+  datos_completos jsonb not null default '{}'::jsonb,
+  creado_en timestamptz not null default now()
+);
+
+create table if not exists public.trazabilidad (
+  id uuid primary key default gen_random_uuid(),
+  entidad text not null,
+  entidad_id uuid,
+  id_local text,
+  accion text not null,
+  estado_anterior text,
+  estado_nuevo text,
+  usuario_id uuid,
+  usuario_nombre text,
+  detalle text,
+  datos_anteriores jsonb,
+  datos_nuevos jsonb,
+  creado_en timestamptz not null default now()
+);
+
+create index if not exists anexos_generados_estado_control_idx
+on public.anexos_generados (estado_control);
+
+create index if not exists anexos_generados_operacion_idx
+on public.anexos_generados (operacion);
+
+create index if not exists registros_control_operacion_idx
+on public.registros_control (operacion);
+
+create index if not exists adquirientes_razon_social_idx
+on public.adquirientes (razon_social);
+
+create index if not exists proveedores_participantes_razon_social_idx
+on public.proveedores_participantes (razon_social);
+
+create index if not exists proveedores_participantes_referidor_idx
+on public.proveedores_participantes (referidor_codigo);
+
+create index if not exists referidores_nombre_idx
+on public.referidores (nombre);
+
+create index if not exists plantillas_anexos_tipo_idx
+on public.plantillas_anexos (tipo_anexo);
+
+create index if not exists cargas_importadas_modulo_idx
+on public.cargas_importadas (modulo, tipo_maestro);
+
+create index if not exists cargas_importadas_creado_en_idx
+on public.cargas_importadas (creado_en desc);
+
+create index if not exists auditoria_entidad_idx
+on public.auditoria (entidad);
+
+create index if not exists auditoria_fecha_hora_idx
+on public.auditoria (fecha_hora desc);
+
+create index if not exists auditoria_entidad_id_idx
+on public.auditoria (entidad_id);
+
+create index if not exists trazabilidad_entidad_idx
+on public.trazabilidad (entidad, entidad_id);
+
+create index if not exists trazabilidad_id_local_idx
+on public.trazabilidad (id_local);
+
+create index if not exists trazabilidad_creado_en_idx
+on public.trazabilidad (creado_en desc);
+
+create or replace function public.actualizar_fecha_modificacion()
 returns trigger
 language plpgsql
 as $$
 begin
-  new.updated_at = now();
+  new.actualizado_en = now();
   return new;
 end;
 $$;
 
-drop trigger if exists set_generated_annexes_updated_at on public.generated_annexes;
-create trigger set_generated_annexes_updated_at
-before update on public.generated_annexes
-for each row execute function public.set_updated_at();
+drop trigger if exists actualizar_anexos_generados_fecha on public.anexos_generados;
+create trigger actualizar_anexos_generados_fecha
+before update on public.anexos_generados
+for each row execute function public.actualizar_fecha_modificacion();
 
-drop trigger if exists set_control_records_updated_at on public.control_records;
-create trigger set_control_records_updated_at
-before update on public.control_records
-for each row execute function public.set_updated_at();
+drop trigger if exists actualizar_registros_control_fecha on public.registros_control;
+create trigger actualizar_registros_control_fecha
+before update on public.registros_control
+for each row execute function public.actualizar_fecha_modificacion();
 
-alter table public.generated_annexes enable row level security;
-alter table public.control_records enable row level security;
+drop trigger if exists actualizar_adquirientes_fecha on public.adquirientes;
+create trigger actualizar_adquirientes_fecha
+before update on public.adquirientes
+for each row execute function public.actualizar_fecha_modificacion();
 
-create policy "Authenticated users can manage generated annexes"
-on public.generated_annexes for all
+drop trigger if exists actualizar_referidores_fecha on public.referidores;
+create trigger actualizar_referidores_fecha
+before update on public.referidores
+for each row execute function public.actualizar_fecha_modificacion();
+
+drop trigger if exists actualizar_proveedores_participantes_fecha on public.proveedores_participantes;
+create trigger actualizar_proveedores_participantes_fecha
+before update on public.proveedores_participantes
+for each row execute function public.actualizar_fecha_modificacion();
+
+drop trigger if exists actualizar_plantillas_anexos_fecha on public.plantillas_anexos;
+create trigger actualizar_plantillas_anexos_fecha
+before update on public.plantillas_anexos
+for each row execute function public.actualizar_fecha_modificacion();
+
+alter table public.anexos_generados enable row level security;
+alter table public.registros_control enable row level security;
+alter table public.adquirientes enable row level security;
+alter table public.referidores enable row level security;
+alter table public.proveedores_participantes enable row level security;
+alter table public.plantillas_anexos enable row level security;
+alter table public.cargas_importadas enable row level security;
+alter table public.auditoria enable row level security;
+alter table public.trazabilidad enable row level security;
+
+drop policy if exists "Usuarios autenticados pueden gestionar anexos generados" on public.anexos_generados;
+create policy "Usuarios autenticados pueden gestionar anexos generados"
+on public.anexos_generados for all
 to authenticated
 using (true)
 with check (true);
 
-create policy "Authenticated users can manage control records"
-on public.control_records for all
+drop policy if exists "Usuarios autenticados pueden gestionar registros de control" on public.registros_control;
+create policy "Usuarios autenticados pueden gestionar registros de control"
+on public.registros_control for all
 to authenticated
 using (true)
+with check (true);
+
+drop policy if exists "Usuarios autenticados pueden gestionar adquirientes" on public.adquirientes;
+create policy "Usuarios autenticados pueden gestionar adquirientes"
+on public.adquirientes for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "Usuarios autenticados pueden gestionar referidores" on public.referidores;
+create policy "Usuarios autenticados pueden gestionar referidores"
+on public.referidores for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "Usuarios autenticados pueden gestionar proveedores participantes" on public.proveedores_participantes;
+create policy "Usuarios autenticados pueden gestionar proveedores participantes"
+on public.proveedores_participantes for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "Usuarios autenticados pueden gestionar plantillas de anexos" on public.plantillas_anexos;
+create policy "Usuarios autenticados pueden gestionar plantillas de anexos"
+on public.plantillas_anexos for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "Usuarios autenticados pueden gestionar cargas importadas" on public.cargas_importadas;
+create policy "Usuarios autenticados pueden gestionar cargas importadas"
+on public.cargas_importadas for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "Usuarios autenticados pueden consultar auditoria" on public.auditoria;
+create policy "Usuarios autenticados pueden consultar auditoria"
+on public.auditoria for select
+to authenticated
+using (true);
+
+drop policy if exists "Usuarios autenticados pueden registrar auditoria" on public.auditoria;
+create policy "Usuarios autenticados pueden registrar auditoria"
+on public.auditoria for insert
+to authenticated
+with check (true);
+
+drop policy if exists "Usuarios autenticados pueden consultar trazabilidad" on public.trazabilidad;
+create policy "Usuarios autenticados pueden consultar trazabilidad"
+on public.trazabilidad for select
+to authenticated
+using (true);
+
+drop policy if exists "Usuarios autenticados pueden registrar trazabilidad" on public.trazabilidad;
+create policy "Usuarios autenticados pueden registrar trazabilidad"
+on public.trazabilidad for insert
+to authenticated
 with check (true);
