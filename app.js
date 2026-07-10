@@ -542,6 +542,7 @@ function updateAuthUi() {
   $('login-form').classList.toggle('is-recovery', passwordRecoveryMode);
   $('auth-email').disabled = passwordRecoveryMode;
   $('auth-password').autocomplete = passwordRecoveryMode ? 'new-password' : 'current-password';
+  $('auth-title').textContent = passwordRecoveryMode ? 'Nueva contraseña' : 'Iniciar sesion';
   $('auth-password-label').textContent = passwordRecoveryMode ? 'Nueva contraseña' : 'Contraseña';
   $('auth-password-confirm-wrap').hidden = !passwordRecoveryMode;
   $('auth-password-confirm').required = passwordRecoveryMode;
