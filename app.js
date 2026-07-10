@@ -457,12 +457,17 @@ async function resetPassword() {
     return;
   }
   $('auth-reset').disabled = true;
-  setLoginStatus('Enviando recuperacion...');
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin,
-  });
-  $('auth-reset').disabled = false;
-  setLoginStatus(error ? 'No se pudo enviar el correo.' : 'Revisa tu correo.');
+  setLoginStatus('Enviando correo...');
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    setLoginStatus(error ? 'No se pudo enviar.' : 'Revisa tu correo.');
+  } catch {
+    setLoginStatus('No se pudo enviar.');
+  } finally {
+    $('auth-reset').disabled = false;
+  }
 }
 
 function updateAuthUi() {
