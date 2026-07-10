@@ -454,7 +454,7 @@ async function resetPassword() {
 
 function updateAuthUi() {
   const email = currentSession?.user?.email || '';
-  document.body.classList.toggle('auth-locked', supabaseReady() && !email);
+  document.body.classList.toggle('auth-locked', !email);
   $('auth-status').textContent = supabaseReady()
     ? email || 'Sin sesion Supabase'
     : 'Supabase sin configurar';
