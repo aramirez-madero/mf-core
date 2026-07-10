@@ -24,12 +24,16 @@
           <input id="auth-email" type="email" autocomplete="username" required />
         </label>
         <label>
-          Clave
+          <span id="auth-password-label">Contrase&ntilde;a</span>
           <input id="auth-password" type="password" autocomplete="current-password" required />
+        </label>
+        <label id="auth-password-confirm-wrap" hidden>
+          Confirmar contrase&ntilde;a
+          <input id="auth-password-confirm" type="password" autocomplete="new-password" />
         </label>
         <button class="primary" id="auth-login" type="submit">Iniciar sesion</button>
         <p class="login-status" id="auth-status">Ingresa tus credenciales.</p>
-        <button class="login-link" id="auth-reset" type="button">Recuperar contraseña</button>
+        <button class="login-link" id="auth-reset" type="button">Recuperar contrase&ntilde;a</button>
       </form>
     </section>
 

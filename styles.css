@@ -26,7 +26,7 @@ h2 { font-size: 30px; line-height: 1.16; max-width: 760px; }
 h3 { font-size: 18px; }
 
 .login-screen { min-height: 100vh; display: none; align-items: center; justify-content: center; padding: 24px; background: #eef5fb; }
-.login-card { width: min(500px, 100%); min-height: 500px; display: grid; grid-template-rows: auto auto auto auto auto 48px auto; gap: 14px; background: #ffffff; border: 1px solid #cfe0ef; border-radius: 8px; box-shadow: 0 26px 70px rgba(33, 63, 99, 0.18); padding: 38px 42px; }
+.login-card { width: min(640px, 100%); min-height: 480px; display: grid; grid-template-rows: auto auto auto auto auto 48px auto; gap: 14px; background: #ffffff; border: 1px solid #cfe0ef; border-radius: 8px; box-shadow: 0 26px 70px rgba(33, 63, 99, 0.18); padding: 40px 52px; }
 .login-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
 .login-brand img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; box-shadow: 0 10px 22px rgba(33, 63, 99, 0.14); }
 .login-brand h1 { color: var(--primary-dark); font-size: 29px; line-height: 1; }

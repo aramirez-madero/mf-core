@@ -4,6 +4,8 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 let currentSession = null;
+let passwordRecoveryMode = false;
+let authNotice = '';
 
 const STORAGE = {
   master: 'mf_core_master_data_v2',
@@ -388,6 +390,7 @@ function switchAnnexTab(tab, options = {}) {
 }
 
 async function initializeAuth() {
+  handleAuthHashError();
   if (!supabaseReady()) {
     updateAuthUi();
     return;
@@ -396,10 +399,15 @@ async function initializeAuth() {
   currentSession = data.session;
   if (!currentSession) clearSensitiveLocalState();
   updateAuthUi();
-  supabase.auth.onAuthStateChange(async (_event, session) => {
+  supabase.auth.onAuthStateChange(async (event, session) => {
     currentSession = session;
+    if (event === 'PASSWORD_RECOVERY') {
+      passwordRecoveryMode = true;
+      authNotice = 'Ingresa tu nueva contraseña.';
+      replacePublicRoute();
+    }
     updateAuthUi();
-    if (session) {
+    if (session && !passwordRecoveryMode) {
       await loadSupabaseState();
       applyRouteFromLocation({ replace: true });
       renderAll();
@@ -407,8 +415,26 @@ async function initializeAuth() {
   });
 }
 
+function handleAuthHashError() {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  if (params.get('type') === 'recovery') {
+    passwordRecoveryMode = true;
+    authNotice = 'Ingresa tu nueva contraseña.';
+  }
+  if (!params.has('error')) return;
+  const code = params.get('error_code') || '';
+  authNotice = code === 'otp_expired'
+    ? 'Enlace vencido. Solicita otro.'
+    : 'Enlace no valido. Solicita otro.';
+  replacePublicRoute();
+}
+
 async function signIn(event) {
   event?.preventDefault();
+  if (passwordRecoveryMode) {
+    await updatePassword();
+    return;
+  }
   if (!supabaseReady()) {
     setLoginStatus('Configura Supabase en Vercel.');
     return;
@@ -440,9 +466,41 @@ async function signOut() {
   if (!supabaseReady()) return;
   await supabase.auth.signOut();
   currentSession = null;
+  passwordRecoveryMode = false;
+  authNotice = '';
   clearSensitiveLocalState();
   updateAuthUi();
   replacePublicRoute();
+  renderAll();
+}
+
+async function updatePassword() {
+  const password = $('auth-password').value;
+  const confirmation = $('auth-password-confirm').value;
+  if (!password || password.length < 8) {
+    setLoginStatus('Usa minimo 8 caracteres.');
+    return;
+  }
+  if (password !== confirmation) {
+    setLoginStatus('Las contraseñas no coinciden.');
+    return;
+  }
+  $('auth-login').disabled = true;
+  setLoginStatus('Actualizando contraseña...');
+  const { error } = await supabase.auth.updateUser({ password });
+  $('auth-login').disabled = false;
+  if (error) {
+    console.warn('Actualizacion de contrasena fallida:', error.message);
+    setLoginStatus('No se pudo actualizar.');
+    return;
+  }
+  passwordRecoveryMode = false;
+  authNotice = 'Contraseña actualizada.';
+  $('auth-password').value = '';
+  $('auth-password-confirm').value = '';
+  updateAuthUi();
+  await loadSupabaseState();
+  applyRouteFromLocation({ replace: true });
   renderAll();
 }
 
@@ -460,7 +518,7 @@ async function resetPassword() {
   setLoginStatus('Enviando correo...');
   try {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: `${window.location.origin}/`,
     });
     if (error) {
       console.warn('Recuperacion de contraseña fallida:', error.message);
@@ -478,16 +536,26 @@ async function resetPassword() {
 
 function updateAuthUi() {
   const email = currentSession?.user?.email || '';
-  document.body.classList.toggle('auth-locked', !email);
-  if (!email) replacePublicRoute();
-  $('auth-status').textContent = supabaseReady()
-    ? email || 'Ingresa tus credenciales.'
-    : 'Configura Supabase en Vercel.';
+  const locked = !email || passwordRecoveryMode;
+  document.body.classList.toggle('auth-locked', locked);
+  if (locked) replacePublicRoute();
+  $('login-form').classList.toggle('is-recovery', passwordRecoveryMode);
+  $('auth-email').disabled = passwordRecoveryMode;
+  $('auth-password').autocomplete = passwordRecoveryMode ? 'new-password' : 'current-password';
+  $('auth-password-label').textContent = passwordRecoveryMode ? 'Nueva contraseña' : 'Contraseña';
+  $('auth-password-confirm-wrap').hidden = !passwordRecoveryMode;
+  $('auth-password-confirm').required = passwordRecoveryMode;
+  $('auth-login').textContent = passwordRecoveryMode ? 'Actualizar contraseña' : 'Iniciar sesion';
+  $('auth-reset').hidden = passwordRecoveryMode;
+  $('auth-status').textContent = authNotice || (supabaseReady()
+    ? 'Ingresa tus credenciales.'
+    : 'Configura Supabase en Vercel.');
   $('auth-user').textContent = email || 'Sin sesion';
   $('auth-logout').hidden = !email;
 }
 
 function setLoginStatus(message) {
+  authNotice = message;
   $('auth-status').textContent = message;
 }
 
