@@ -16,10 +16,6 @@ const STORAGE = {
   migrations: 'mf_core_migrations_v1',
 };
 
-const MIGRATIONS = {
-  adquirientesFromMfExcel: '2026-06-19-adquirientes-mf-excel',
-};
-
 const DEFAULT_ANNEX_PARAMS = {
   tnm: '',
   comisionDesembolso: '',
@@ -69,41 +65,10 @@ const HISTORICO_COLUMNS = [
 ];
 
 const DEFAULT_MASTER = {
-  adquirentes: [
-    { id: 'adq-demo-1', codigo: 'ADQ0002', razon_social: 'PERURAIL S.A.', ruc: '20431871808', estado: 'Activo' },
-  ],
-  proveedoresParticipantes: [
-    {
-      id: 'pp-mf',
-      codigo_cavali: '841',
-      codigo_contrato: 'MF',
-      ruc: '20604772410',
-      razon_social: 'MADERO FACTORING S.A.C.',
-      representante_legal: '',
-      tipo_documento: 'DNI',
-      nro_documento: '',
-      cargo: '',
-      estado: 'Activo',
-    },
-    {
-      id: 'pp-demo-1',
-      codigo_cavali: '',
-      codigo_contrato: 'CLI-001',
-      ruc: '20559070999',
-      razon_social: 'TRIPLETS SOCIEDAD ANONIMA CERRADA - TRIPLETS S.A.C.',
-      representante_legal: '',
-      tipo_documento: 'DNI',
-      nro_documento: '',
-      cargo: '',
-      estado: 'Activo',
-    },
-  ],
+  adquirentes: [],
+  proveedoresParticipantes: [],
   referidores: [],
-  plantillasAnexos: [
-    { id: 'tpl-1', tipo_anexo: 'Anexo Tipo 1', version: 'v1', ruta_archivo_plantilla: 'plantillas/anexo-tipo-1.docx', estado: 'Activo' },
-    { id: 'tpl-2', tipo_anexo: 'Anexo Tipo 2', version: 'v1', ruta_archivo_plantilla: 'plantillas/anexo-tipo-2.docx', estado: 'Activo' },
-    { id: 'tpl-3', tipo_anexo: 'Anexo Tipo 3', version: 'v1', ruta_archivo_plantilla: 'plantillas/anexo-tipo-3.docx', estado: 'Activo' },
-  ],
+  plantillasAnexos: [],
 };
 
 const MASTER_VIEWS = {
@@ -292,7 +257,6 @@ async function boot() {
   });
   $('generate-annexes').addEventListener('click', generateAnnexes);
   $('cancel-preview-import').addEventListener('click', cancelPreviewImport);
-  $('preview-annex-design').addEventListener('click', previewAnnexDesign);
   $('annex-params').addEventListener('input', cacheAnnexParamInput);
   $('annex-params').addEventListener('change', commitAnnexParamInput);
   $('annex-params').addEventListener('focusout', commitAnnexParamInput);
@@ -343,7 +307,6 @@ async function boot() {
   applyRouteFromLocation({ replace: true });
   initializeCounters();
   handleStartupActions();
-  runStartupMigrations();
   renderAll();
 }
 
@@ -538,87 +501,11 @@ async function handleMasterFile(event) {
   }
 }
 
-async function loadDefaultAdquirientes() {
-  if (!window.XLSX) return;
-  try {
-    const response = await fetch('./ejemplos/Adquiriente.xlsx', { cache: 'no-store' });
-    if (!response.ok) return;
-    const buffer = await response.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, raw: false });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
-    const imported = rows.map((row) => mapMasterRow(row, 'adquirentes')).filter(Boolean)
-      .map((row) => ({ ...row, codigo: row.codigo_importado || row.codigo }));
-    const currentWasSeedOnly = state.masterData.adquirentes.length <= DEFAULT_MASTER.adquirentes.length;
-    const existingRucs = new Set(currentWasSeedOnly ? [] : state.masterData.adquirentes.map((row) => normalizeRuc(row.ruc)));
-    const missing = imported.filter((row) => row.ruc && !existingRucs.has(normalizeRuc(row.ruc)));
-    if (!missing.length) return;
-    state.masterData.adquirentes = currentWasSeedOnly ? missing : [...state.masterData.adquirentes, ...missing];
-    syncAdquirenteCounterFromRows(state.masterData.adquirentes);
-    save(STORAGE.master, state.masterData);
-    appendAudit('maestros', 'adquirentes', 'Carga inicial de Adquirientes', '', 'Importado', `${missing.length} registros desde ejemplos/Adquiriente.xlsx.`);
-    renderAll();
-  } catch {
-    // La carga automatica es auxiliar; la importacion manual sigue disponible.
-  }
-}
-
-async function loadMfAdquirientesBase({ migration = false } = {}) {
-  if (!window.XLSX) {
-    const message = 'No se pudo cargar Excel: libreria XLSX no disponible.';
-    if (migration) throw new Error(message);
-    showToast(message);
-    return false;
-  }
-  try {
-    const response = await fetch('./ejemplos/MF%20-%20Adquirentes.xlsx', { cache: 'no-store' });
-    if (!response.ok) throw new Error('Archivo no encontrado.');
-    const buffer = await response.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, raw: false });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
-    const imported = rows.map((row) => mapMasterRow(row, 'adquirentes')).filter(Boolean)
-      .map((row) => ({
-        id: crypto.randomUUID(),
-        codigo: row.codigo_importado || row.codigo || nextAdquirenteCode(),
-        razon_social: row.razon_social,
-        ruc: row.ruc,
-        estado: normalizeEstado(row.estado),
-        fecha_creacion: new Date().toISOString(),
-        fecha_actualizacion: new Date().toISOString(),
-      }));
-
-    state.masterData.adquirentes = imported;
-    setAdquirenteCounterFromRows(imported);
-    save(STORAGE.master, state.masterData);
-    appendAudit('maestros', 'adquirentes', 'Carga base MF - Adquirientes', 'Base anterior', 'Base historica cargada', `${imported.length} adquirientes cargados desde MF - Adquirentes.xlsx.`);
-    renderAll();
-    showToast(`Adquirientes cargados: ${imported.length}. Siguiente codigo: ${peekNextAdquirenteCode()}.`);
-    return true;
-  } catch (error) {
-    if (migration) throw error;
-    showToast(`No se pudo cargar MF - Adquirentes.xlsx: ${error.message}`);
-    return false;
-  }
-}
-
 function seedMasterSelector() {
   $('master-selector').innerHTML = Object.entries(MASTER_VIEWS)
     .map(([key, view]) => `<option value="${key}">${escapeHtml(view.title)}</option>`)
     .join('');
   $('master-selector').value = state.activeMaster;
-}
-
-async function runStartupMigrations() {
-  if (state.migrations[MIGRATIONS.adquirientesFromMfExcel]) return;
-  try {
-    const loaded = await loadMfAdquirientesBase({ migration: true });
-    if (!loaded) return;
-    state.migrations[MIGRATIONS.adquirientesFromMfExcel] = new Date().toISOString();
-    save(STORAGE.migrations, state.migrations);
-  } catch (error) {
-    showErrorDialog('No se pudo cargar Adquirientes', error.message);
-  }
 }
 
 function handleStartupActions() {
@@ -1393,8 +1280,8 @@ function assignOperationNumbers(rows) {
     const key = operationCounterKey(row);
     if (!groupNext[key]) {
       const current = Math.max(
-        Number(state.counters[`operacion:${key}`] || 2000),
-        ...existingPreview.filter((item) => operationCounterKey(item) === key).map((item) => Number(item.operacion) || 2000),
+        Number(state.counters[`operacion:${key}`] || 1999),
+        ...existingPreview.filter((item) => operationCounterKey(item) === key).map((item) => Number(item.operacion) || 1999),
       );
       groupNext[key] = current + 1;
     }
@@ -1406,8 +1293,8 @@ function commitOperationCounters(rows) {
   const nextCounters = { ...state.counters };
   rows.forEach((row) => {
     const key = `operacion:${operationCounterKey(row)}`;
-    const value = Number(row.operacion) || 2000;
-    nextCounters[key] = Math.max(Number(nextCounters[key] || 2000), value);
+    const value = Number(row.operacion) || 1999;
+    nextCounters[key] = Math.max(Number(nextCounters[key] || 1999), value);
   });
   state.counters = nextCounters;
   save(STORAGE.counters, state.counters);
@@ -1622,45 +1509,6 @@ function cancelPreviewImport() {
   renderAll();
 }
 
-function previewAnnexDesign() {
-  const sample = groupAnnexRows(state.previewRows.filter((row) => ['Validado', 'Listo para generar', 'Generado'].includes(row.estado_validacion)))[0] || calculateAnnexGroup({
-    originador: 'Madero Factoring',
-    cliente: 'PROVEEDOR EJEMPLO S.A.C.',
-    ruc_cliente: '20123456789',
-    codigo_contrato: '0004',
-    operacion: '2001',
-    tipo_operacion: 'Factoring',
-    obligado: 'ADQUIRIENTE EJEMPLO S.A.',
-    ruc_obligado: '20987654321',
-    codigo_obligado: 'ADQ0001',
-    factura: 'E001-000123',
-    fecha_desembolso: '2026-06-19',
-    fecha_vencimiento: '2026-07-30',
-    moneda: 'PEN',
-    monto_neto_pago: 12500.75,
-    monto_financiado_saldo_capital: 11800.00,
-    interes_compensatorio: 420.00,
-    igv: 75.60,
-    monto_desembolsar: 11800.00,
-    tasa: 0.18,
-    porcentaje_comision_desembolso: 0.015,
-    margen_cobertura: 0.10,
-    costo_bancario: 35.00,
-    comisiones: 120.00,
-    gastos_administrativos: 80.00,
-    participante_origen_nombre: 'Madero Factoring',
-    codigo_valor_cavali: 'FN0012345678',
-  });
-
-  const popup = window.open('', '_blank', 'width=980,height=760');
-  if (!popup) {
-    showErrorDialog('No se pudo abrir el anexo', 'Permite ventanas emergentes para ver el ejemplo de anexo.');
-    return;
-  }
-  popup.document.write(buildAnnexHtmlV2(sample));
-  popup.document.close();
-}
-
 function buildAnnexHtml(row) {
   const amount = new Intl.NumberFormat('es-PE', { style: 'currency', currency: row.moneda === 'USD' ? 'USD' : 'PEN' }).format(Number(row.monto_neto_pago) || 0);
   const disburse = new Intl.NumberFormat('es-PE', { style: 'currency', currency: row.moneda === 'USD' ? 'USD' : 'PEN' }).format(Number(row.monto_desembolsar) || 0);
@@ -1668,7 +1516,7 @@ function buildAnnexHtml(row) {
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Ejemplo Anexo MF Core</title>
+  <title>Anexo MF Core</title>
   <style>
     :root { --primary:#2f527c; --accent:#8af58b; --text:#172033; --muted:#667085; --line:#dbe6f2; }
     * { box-sizing: border-box; }
@@ -2658,7 +2506,7 @@ function appendAudit(entidad, entidadId, accion, estadoAnterior, estadoNuevo, co
 }
 
 function resetDemo() {
-  if (!confirm('Reiniciar datos locales de demo?')) return;
+  if (!confirm('Reiniciar datos locales?')) return;
   state.masterData = structuredClone(DEFAULT_MASTER);
   state.previewRows = [];
   state.controlRows = [];
