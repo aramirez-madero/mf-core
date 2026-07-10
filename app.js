@@ -462,8 +462,14 @@ async function resetPassword() {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.origin,
     });
-    setLoginStatus(error ? 'No se pudo enviar.' : 'Revisa tu correo.');
-  } catch {
+    if (error) {
+      console.warn('Recuperacion de contraseña fallida:', error.message);
+      setLoginStatus('Revisa Email Auth y URL.');
+      return;
+    }
+    setLoginStatus('Revisa tu correo.');
+  } catch (error) {
+    console.warn('Recuperacion de contraseña fallida:', error);
     setLoginStatus('No se pudo enviar.');
   } finally {
     $('auth-reset').disabled = false;
