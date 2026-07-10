@@ -423,9 +423,10 @@ function handleAuthHashError() {
   }
   if (!params.has('error')) return;
   const code = params.get('error_code') || '';
+  passwordRecoveryMode = false;
   authNotice = code === 'otp_expired'
-    ? 'Enlace vencido. Solicita otro.'
-    : 'Enlace no valido. Solicita otro.';
+    ? 'Enlace vencido. Solicita otro enlace.'
+    : 'Enlace no valido. Solicita otro enlace.';
   replacePublicRoute();
 }
 
@@ -442,7 +443,7 @@ async function signIn(event) {
   const email = $('auth-email').value.trim();
   const password = $('auth-password').value;
   if (!email || !password) {
-    setLoginStatus('Completa correo y clave.');
+    setLoginStatus('Completa correo y contraseña.');
     return;
   }
   $('auth-login').disabled = true;
