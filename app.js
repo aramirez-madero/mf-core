@@ -305,7 +305,11 @@ async function boot() {
   seedMasterSelector();
   await initializeAuth();
   await loadSupabaseState();
-  applyRouteFromLocation({ replace: true });
+  if (currentSession) {
+    applyRouteFromLocation({ replace: true });
+  } else {
+    replacePublicRoute();
+  }
   initializeCounters();
   handleStartupActions();
   renderAll();
@@ -338,6 +342,12 @@ function replaceRoute(moduleName, annexTab) {
     : routeForModule(moduleName);
   if (window.location.pathname !== route) {
     window.history.replaceState({ module: moduleName, annexTab }, '', route);
+  }
+}
+
+function replacePublicRoute() {
+  if (window.location.pathname !== '/') {
+    window.history.replaceState({}, document.title, '/');
   }
 }
 
@@ -391,6 +401,7 @@ async function initializeAuth() {
     updateAuthUi();
     if (session) {
       await loadSupabaseState();
+      applyRouteFromLocation({ replace: true });
       renderAll();
     }
   });
@@ -399,7 +410,7 @@ async function initializeAuth() {
 async function signIn(event) {
   event?.preventDefault();
   if (!supabaseReady()) {
-    setLoginStatus('Supabase no esta configurado.');
+    setLoginStatus('Configuracion pendiente.');
     return;
   }
   const email = $('auth-email').value.trim();
@@ -421,6 +432,7 @@ async function signIn(event) {
   setLoginStatus('Sesion iniciada.');
   updateAuthUi();
   await loadSupabaseState();
+  applyRouteFromLocation({ replace: true });
   renderAll();
 }
 
@@ -430,12 +442,13 @@ async function signOut() {
   currentSession = null;
   clearSensitiveLocalState();
   updateAuthUi();
+  replacePublicRoute();
   renderAll();
 }
 
 async function resetPassword() {
   if (!supabaseReady()) {
-    setLoginStatus('Supabase no esta configurado.');
+    setLoginStatus('Configuracion pendiente.');
     return;
   }
   const email = $('auth-email').value.trim();
@@ -455,9 +468,10 @@ async function resetPassword() {
 function updateAuthUi() {
   const email = currentSession?.user?.email || '';
   document.body.classList.toggle('auth-locked', !email);
+  if (!email) replacePublicRoute();
   $('auth-status').textContent = supabaseReady()
     ? email || 'Sin sesion Supabase'
-    : 'Supabase sin configurar';
+    : 'Configuracion pendiente';
   $('auth-user').textContent = email || 'Sin sesion';
   $('auth-logout').hidden = !email;
 }
