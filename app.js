@@ -286,7 +286,8 @@ async function boot() {
     $('annex-generated-sort').value = 'fecha_desc';
     renderGeneratedAnnexes();
   });
-  $('auth-login').addEventListener('click', signIn);
+  $('login-form').addEventListener('submit', signIn);
+  $('auth-reset').addEventListener('click', resetPassword);
   $('auth-logout').addEventListener('click', signOut);
   $('add-master').addEventListener('click', () => openRecordModal('master', state.activeMaster, null));
   $('export-control-format').addEventListener('change', (event) => {
@@ -395,24 +396,29 @@ async function initializeAuth() {
   });
 }
 
-async function signIn() {
+async function signIn(event) {
+  event?.preventDefault();
   if (!supabaseReady()) {
-    showErrorDialog('Supabase no configurado', 'Revisa VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el archivo .env.');
+    setLoginStatus('Supabase no esta configurado.');
     return;
   }
   const email = $('auth-email').value.trim();
   const password = $('auth-password').value;
   if (!email || !password) {
-    showErrorDialog('Faltan credenciales', 'Ingresa correo y clave para conectar con Supabase.');
+    setLoginStatus('Ingresa correo y clave.');
     return;
   }
+  $('auth-login').disabled = true;
+  setLoginStatus('Validando credenciales...');
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  $('auth-login').disabled = false;
   if (error) {
-    showErrorDialog('No se pudo iniciar sesion', error.message);
+    setLoginStatus('No se pudo iniciar sesion. Verifica tus credenciales.');
     return;
   }
   currentSession = data.session;
   $('auth-password').value = '';
+  setLoginStatus('Sesion iniciada.');
   updateAuthUi();
   await loadSupabaseState();
   renderAll();
@@ -427,16 +433,37 @@ async function signOut() {
   renderAll();
 }
 
+async function resetPassword() {
+  if (!supabaseReady()) {
+    setLoginStatus('Supabase no esta configurado.');
+    return;
+  }
+  const email = $('auth-email').value.trim();
+  if (!email) {
+    setLoginStatus('Ingresa tu correo.');
+    return;
+  }
+  $('auth-reset').disabled = true;
+  setLoginStatus('Enviando recuperacion...');
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+  $('auth-reset').disabled = false;
+  setLoginStatus(error ? 'No se pudo enviar el correo.' : 'Revisa tu correo.');
+}
+
 function updateAuthUi() {
   const email = currentSession?.user?.email || '';
   document.body.classList.toggle('auth-locked', supabaseReady() && !email);
   $('auth-status').textContent = supabaseReady()
     ? email || 'Sin sesion Supabase'
     : 'Supabase sin configurar';
-  $('auth-email').hidden = Boolean(email);
-  $('auth-password').hidden = Boolean(email);
-  $('auth-login').hidden = Boolean(email);
+  $('auth-user').textContent = email || 'Sin sesion';
   $('auth-logout').hidden = !email;
+}
+
+function setLoginStatus(message) {
+  $('auth-status').textContent = message;
 }
 
 function currentUserName() {

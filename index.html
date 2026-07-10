@@ -9,6 +9,24 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
+    <section class="login-screen" id="login-screen">
+      <form class="login-card" id="login-form">
+        <img src="./assets/logos/mf-logo.jpg" alt="MF Core" />
+        <h1>MF Core</h1>
+        <label>
+          Correo
+          <input id="auth-email" type="email" autocomplete="username" required />
+        </label>
+        <label>
+          Clave
+          <input id="auth-password" type="password" autocomplete="current-password" required />
+        </label>
+        <button class="primary" id="auth-login" type="submit">Iniciar sesion</button>
+        <button class="ghost login-link" id="auth-reset" type="button">Recuperar clave</button>
+        <p class="login-status" id="auth-status">Sesion requerida</p>
+      </form>
+    </section>
+
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -34,21 +52,10 @@
             <h1 id="module-title">Anexos</h1>
           </div>
           <div class="auth-panel" id="auth-panel">
-            <span id="auth-status">Sin sesion</span>
-            <input id="auth-email" type="email" placeholder="Correo" autocomplete="username" />
-            <input id="auth-password" type="password" placeholder="Clave" autocomplete="current-password" />
-            <button class="secondary" id="auth-login" type="button">Ingresar</button>
+            <span id="auth-user">Sin sesion</span>
             <button class="secondary" id="auth-logout" type="button" hidden>Salir</button>
           </div>
         </header>
-
-        <section class="auth-required" id="auth-required">
-          <div class="panel auth-required-panel">
-            <p class="eyebrow">Acceso seguro</p>
-            <h3>Inicia sesion para usar MF Core</h3>
-            <p>Los datos de Maestros, Anexos, Control, Auditoria y Trazabilidad estan protegidos con Supabase Auth y RLS.</p>
-          </div>
-        </section>
 
         <section class="module active" id="anexos">
           <div class="subnav">
