@@ -112,3 +112,20 @@ Antes de dejar Vercel en produccion:
 6. En Vercel solo configurar `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 
 La app bloquea las pantallas operativas si no hay sesion activa. Los datos deben leerse desde Supabase despues del login.
+
+## URL de produccion
+
+Dominio actual:
+
+```txt
+https://mfactoring-core.vercel.app/
+```
+
+En Supabase, ir a `Authentication > URL Configuration` y configurar:
+
+```txt
+Site URL: https://mfactoring-core.vercel.app
+Redirect URLs: https://mfactoring-core.vercel.app
+```
+
+Esto es necesario para que el login y la recuperacion de clave vuelvan a la app correcta.
