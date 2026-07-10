@@ -410,13 +410,13 @@ async function initializeAuth() {
 async function signIn(event) {
   event?.preventDefault();
   if (!supabaseReady()) {
-    setLoginStatus('Configuracion pendiente.');
+    setLoginStatus('Configura Supabase en Vercel.');
     return;
   }
   const email = $('auth-email').value.trim();
   const password = $('auth-password').value;
   if (!email || !password) {
-    setLoginStatus('Ingresa correo y clave.');
+    setLoginStatus('Completa correo y clave.');
     return;
   }
   $('auth-login').disabled = true;
@@ -424,7 +424,7 @@ async function signIn(event) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   $('auth-login').disabled = false;
   if (error) {
-    setLoginStatus('No se pudo iniciar sesion. Verifica tus credenciales.');
+    setLoginStatus('Credenciales no validas.');
     return;
   }
   currentSession = data.session;
@@ -448,7 +448,7 @@ async function signOut() {
 
 async function resetPassword() {
   if (!supabaseReady()) {
-    setLoginStatus('Configuracion pendiente.');
+    setLoginStatus('Configura Supabase en Vercel.');
     return;
   }
   const email = $('auth-email').value.trim();
@@ -470,8 +470,8 @@ function updateAuthUi() {
   document.body.classList.toggle('auth-locked', !email);
   if (!email) replacePublicRoute();
   $('auth-status').textContent = supabaseReady()
-    ? email || 'Sin sesion Supabase'
-    : 'Configuracion pendiente';
+    ? email || 'Ingresa tus credenciales.'
+    : 'Configura Supabase en Vercel.';
   $('auth-user').textContent = email || 'Sin sesion';
   $('auth-logout').hidden = !email;
 }

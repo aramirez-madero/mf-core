@@ -13,8 +13,12 @@
       <form class="login-card" id="login-form">
         <div class="login-brand">
           <img src="./assets/logos/mf-logo.jpg" alt="MF Core" />
-          <h1>MF Core</h1>
+          <div>
+            <h1>MF Core</h1>
+            <span>Madero Factoring</span>
+          </div>
         </div>
+        <h2>Iniciar sesion</h2>
         <label>
           Correo
           <input id="auth-email" type="email" autocomplete="username" required />
@@ -24,8 +28,8 @@
           <input id="auth-password" type="password" autocomplete="current-password" required />
         </label>
         <button class="primary" id="auth-login" type="submit">Iniciar sesion</button>
-        <button class="ghost login-link" id="auth-reset" type="button">Recuperar clave</button>
-        <p class="login-status" id="auth-status">Sesion requerida</p>
+        <p class="login-status" id="auth-status">Ingresa tus credenciales.</p>
+        <button class="login-link" id="auth-reset" type="button">Recuperar clave</button>
       </form>
     </section>
 
