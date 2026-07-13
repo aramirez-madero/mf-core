@@ -558,10 +558,10 @@ textarea { min-height: 86px; resize: vertical; }
 }
 .row-menu summary::-webkit-details-marker { display: none; }
 .row-menu-panel {
-  position: absolute;
-  right: 0;
-  top: 40px;
-  z-index: 5;
+  position: fixed;
+  left: var(--menu-left, 0);
+  top: var(--menu-top, 0);
+  z-index: 60;
   display: grid;
   min-width: 180px;
   padding: 6px;

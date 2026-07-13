@@ -2194,6 +2194,32 @@ function renderGeneratedAnnexes() {
   container.querySelectorAll('[data-download-annex]').forEach((button) => button.addEventListener('click', () => openGeneratedAnnex(button.dataset.downloadAnnex, true)));
   container.querySelectorAll('[data-send-control]').forEach((button) => button.addEventListener('click', () => confirmAnnexToControl(button.dataset.sendControl)));
   container.querySelectorAll('[data-cancel-annex]').forEach((button) => button.addEventListener('click', () => cancelAnnex(button.dataset.cancelAnnex)));
+  container.querySelectorAll('.row-menu').forEach((menu) => {
+    menu.addEventListener('toggle', () => {
+      if (!menu.open) return;
+      container.querySelectorAll('.row-menu[open]').forEach((other) => {
+        if (other !== menu) other.open = false;
+      });
+      positionRowMenu(menu);
+    });
+  });
+}
+
+function positionRowMenu(menu) {
+  const summary = menu.querySelector('summary');
+  const panel = menu.querySelector('.row-menu-panel');
+  if (!summary || !panel) return;
+  const rect = summary.getBoundingClientRect();
+  const panelWidth = panel.offsetWidth || 180;
+  const panelHeight = panel.offsetHeight || 150;
+  const margin = 8;
+  const left = Math.min(Math.max(margin, rect.right - panelWidth), window.innerWidth - panelWidth - margin);
+  const belowTop = rect.bottom + 6;
+  const top = belowTop + panelHeight > window.innerHeight - margin
+    ? Math.max(margin, rect.top - panelHeight - 6)
+    : belowTop;
+  panel.style.setProperty('--menu-left', `${left}px`);
+  panel.style.setProperty('--menu-top', `${top}px`);
 }
 
 function filterGeneratedAnnexes(rows) {
