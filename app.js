@@ -251,6 +251,10 @@ async function boot() {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) void enforceActiveProfile();
   });
+  document.addEventListener('click', closeProfileMenuOnOutsideClick);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeProfileMenu();
+  });
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', (event) => {
     event.preventDefault();
     switchModule(button.dataset.module);
@@ -2073,7 +2077,7 @@ function buildAnnexHtmlV2(row, options = {}) {
   const totalIgvGastos = igvGastosOperativos + igvGastosAdministrativos;
   const totalGastos = gastosBancarios + gastosDesembolso + gastosAdministrativos + totalIgvGastos;
   const montoEfectivo = montoDescontado - totalGastos;
-  const logoUrl = new URL('assets/logos/mf-logo.jpg', window.location.href).href;
+  const logoUrl = assetUrl('assets/logos/mf-logo.jpg');
   const contratoNro = clean(row.codigo_contrato || row.cliente_factoring_referidor);
   const operacionNro = clean(row.operacion || row.control_id);
   const codigoAnexo = ['MF', contratoNro, operacionNro].filter(Boolean).join('-');
@@ -2994,7 +2998,8 @@ function openGeneratedAnnex(id, autoDownload = false) {
 }
 
 function annexSnapshotHtml(html, autoDownload = false) {
-  if (!autoDownload) return html;
+  const normalizedHtml = normalizeAnnexAssets(html);
+  if (!autoDownload) return normalizedHtml;
   const autoDownloadScript = `
   <script>
     window.addEventListener('load', function () {
@@ -3004,7 +3009,27 @@ function annexSnapshotHtml(html, autoDownload = false) {
       }, 500);
     });
   </script>`;
-  return html.includes('</body>') ? html.replace('</body>', `${autoDownloadScript}</body>`) : `${html}${autoDownloadScript}`;
+  return normalizedHtml.includes('</body>') ? normalizedHtml.replace('</body>', `${autoDownloadScript}</body>`) : `${normalizedHtml}${autoDownloadScript}`;
+}
+
+function normalizeAnnexAssets(html) {
+  const logoUrl = assetUrl('assets/logos/mf-logo.jpg');
+  return String(html || '').replace(/src="[^"]*assets\/logos\/mf-logo\.jpg"/g, `src="${logoUrl}"`);
+}
+
+function assetUrl(path) {
+  return `${window.location.origin}/${String(path).replace(/^\/+/, '')}`;
+}
+
+function closeProfileMenuOnOutsideClick(event) {
+  const menu = $('profile-menu');
+  if (!menu || menu.hidden || !menu.open) return;
+  if (!menu.contains(event.target)) menu.open = false;
+}
+
+function closeProfileMenu() {
+  const menu = $('profile-menu');
+  if (menu) menu.open = false;
 }
 
 function openRecordModal(type, scope, id) {
