@@ -2068,6 +2068,7 @@ function buildAnnexHtmlV2(row, options = {}) {
   const porcentajeFinanciado = Math.max(0, 1 - asNumber(row.margen_cobertura));
   const gastosBancarios = asNumber(row.costo_bancario || row.gastos_bancarios);
   const gastosDesembolso = asNumber(row.comisiones || row.gastos_desembolso);
+  const gastosDesembolsoVisual = gastosBancarios + gastosDesembolso;
   const gastosAdministrativos = asNumber(row.gastos_administrativos);
   const igvGastosOperativos = asNumber(row.igv_gastos_operativos) || (gastosBancarios + gastosDesembolso) * 0.18;
   const igvGastosAdministrativos = asNumber(row.igv_gastos_administrativos) || gastosAdministrativos * 0.18;
@@ -2222,8 +2223,7 @@ function buildAnnexHtmlV2(row, options = {}) {
         </tbody>
       </table>
       <div class="annex-summary-block">
-        <div class="annex-summary-line"><span>(-) G. Bancarios</span><span>${moneyValue(gastosBancarios)}</span></div>
-        <div class="annex-summary-line"><span>(-) G. Desembolso</span><span>${moneyValue(gastosDesembolso)}</span></div>
+        <div class="annex-summary-line"><span>(-) G. Desembolso</span><span>${moneyValue(gastosDesembolsoVisual)}</span></div>
         ${hasAdminExpense ? `<div class="annex-summary-line"><span>(-) G. Administrativos</span><span>${moneyValue(gastosAdministrativos)}</span></div>` : ''}
         <div class="annex-summary-line"><span>(-) IGV</span><span>${moneyValue(totalIgvGastos)}</span></div>
         <div class="annex-summary-line"><span>Monto a Depositar</span><span>${moneyValue(montoEfectivo)}</span></div>
