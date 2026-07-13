@@ -750,10 +750,16 @@ function updateAuthUi() {
   $('auth-status').textContent = authNotice || (supabaseReady()
     ? 'Ingresa tus credenciales.'
     : 'Configura Supabase en Vercel.');
+  $('profile-menu').hidden = !email;
   $('auth-user').textContent = email || 'Sin sesion';
-  $('change-password-open').hidden = !email;
-  $('auth-logout').hidden = !email;
+  $('auth-role').textContent = ROLE_LABELS[currentRole()] || 'Usuario';
+  $('profile-avatar').textContent = profileInitial(email);
   updateNavigationAccess();
+}
+
+function profileInitial(email) {
+  const text = currentProfile?.nombre || email || 'U';
+  return text.trim().slice(0, 1).toUpperCase() || 'U';
 }
 
 function setLoginStatus(message) {
@@ -2854,7 +2860,7 @@ function renderUsers() {
               </td>
               <td>${escapeHtml(formatLimaDateTime(profile.actualizado_en || profile.creado_en || ''))}</td>
               <td>
-                <button class="secondary compact-action" type="button" data-send-recovery="${profile.id_local || profile.id}">Enviar recuperación</button>
+                <button class="icon-action" type="button" title="Enviar correo de recuperación" aria-label="Enviar correo de recuperación" data-send-recovery="${profile.id_local || profile.id}">${iconMail()}</button>
               </td>
             </tr>
           `).join('') : '<tr><td class="empty" colspan="6">No hay perfiles.</td></tr>'}
@@ -3756,6 +3762,10 @@ function iconView() {
 
 function iconDownload() {
   return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4h2v8.2l3.3-3.3 1.4 1.4L12 16l-5.7-5.7 1.4-1.4 3.3 3.3V4ZM5 18h14v2H5v-2Z"/></svg>';
+}
+
+function iconMail() {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm0 3.2V17h16V8.2l-8 5.2-8-5.2ZM5.6 7l6.4 4.2L18.4 7H5.6Z"/></svg>';
 }
 
 function formatValue(value) {

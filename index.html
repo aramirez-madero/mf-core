@@ -63,9 +63,19 @@
             <h1 id="module-title">Anexos</h1>
           </div>
           <div class="auth-panel" id="auth-panel">
-            <span id="auth-user">Sin sesion</span>
-            <button class="secondary" id="change-password-open" type="button" hidden>Cambiar contrase&ntilde;a</button>
-            <button class="secondary" id="auth-logout" type="button" hidden>Salir</button>
+            <details class="profile-menu" id="profile-menu" hidden>
+              <summary aria-label="Perfil">
+                <span class="profile-avatar" id="profile-avatar">U</span>
+                <span class="profile-meta">
+                  <strong id="auth-user">Sin sesion</strong>
+                  <small id="auth-role">Usuario</small>
+                </span>
+              </summary>
+              <div class="profile-menu-panel">
+                <button id="change-password-open" type="button">Cambiar contrase&ntilde;a</button>
+                <button id="auth-logout" type="button">Salir</button>
+              </div>
+            </details>
           </div>
         </header>
 
