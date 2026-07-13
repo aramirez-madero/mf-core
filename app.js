@@ -8,6 +8,7 @@ let passwordRecoveryMode = false;
 let authNotice = '';
 let currentProfile = null;
 let userProfiles = [];
+let sessionGuardTimer = null;
 
 const STORAGE = {
   master: 'mf_core_master_data_v2',
@@ -245,6 +246,10 @@ void boot();
 
 async function boot() {
   window.addEventListener('popstate', applyRouteFromLocation);
+  window.addEventListener('focus', enforceActiveProfile);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) void enforceActiveProfile();
+  });
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', (event) => {
     event.preventDefault();
     switchModule(button.dataset.module);
@@ -336,6 +341,8 @@ async function boot() {
   $('login-form').addEventListener('submit', signIn);
   $('auth-reset').addEventListener('click', resetPassword);
   $('auth-logout').addEventListener('click', signOut);
+  $('change-password-open').addEventListener('click', openPasswordModal);
+  $('profile-password-save').addEventListener('click', saveProfilePassword);
   $('add-user-profile').addEventListener('click', addUserProfile);
   $('add-master').addEventListener('click', () => openRecordModal('master', state.activeMaster, null));
   $('export-control-format').addEventListener('change', (event) => {
@@ -454,6 +461,7 @@ async function initializeAuth() {
     userProfiles = [];
     authNotice = 'Usuario inactivo.';
   }
+  if (currentSession) startSessionGuard();
   updateAuthUi();
   supabase.auth.onAuthStateChange(async (event, session) => {
     currentSession = session;
@@ -473,6 +481,7 @@ async function initializeAuth() {
         updateAuthUi();
         return;
       }
+      startSessionGuard();
     }
     updateAuthUi();
     if (session && !passwordRecoveryMode) {
@@ -533,6 +542,7 @@ async function signIn(event) {
     updateAuthUi();
     return;
   }
+  startSessionGuard();
   $('auth-password').value = '';
   setLoginStatus('Sesion iniciada.');
   updateAuthUi();
@@ -543,6 +553,7 @@ async function signIn(event) {
 
 async function signOut() {
   if (!supabaseReady()) return;
+  stopSessionGuard();
   await supabase.auth.signOut();
   currentSession = null;
   currentProfile = null;
@@ -553,6 +564,37 @@ async function signOut() {
   updateAuthUi();
   replacePublicRoute();
   renderAll();
+}
+
+function startSessionGuard() {
+  if (sessionGuardTimer || !currentSession) return;
+  sessionGuardTimer = window.setInterval(() => {
+    void enforceActiveProfile();
+  }, 60000);
+}
+
+function stopSessionGuard() {
+  if (!sessionGuardTimer) return;
+  window.clearInterval(sessionGuardTimer);
+  sessionGuardTimer = null;
+}
+
+async function enforceActiveProfile() {
+  if (!supabaseReady() || !currentSession || passwordRecoveryMode) return;
+  await loadUserProfiles();
+  if (currentProfile?.activo === false) {
+    stopSessionGuard();
+    await supabase.auth.signOut();
+    currentSession = null;
+    currentProfile = null;
+    userProfiles = [];
+    passwordRecoveryMode = false;
+    authNotice = 'Usuario inactivo.';
+    clearSensitiveLocalState();
+    updateAuthUi();
+    replacePublicRoute();
+    renderAll();
+  }
 }
 
 async function updatePassword() {
@@ -583,6 +625,39 @@ async function updatePassword() {
   await loadSupabaseState();
   applyRouteFromLocation({ replace: true });
   renderAll();
+}
+
+function openPasswordModal() {
+  $('profile-password').value = '';
+  $('profile-password-confirm').value = '';
+  $('profile-password-status').textContent = '';
+  $('password-modal').showModal();
+}
+
+async function saveProfilePassword(event) {
+  event.preventDefault();
+  if (!supabaseReady() || !currentSession) return;
+  const password = $('profile-password').value;
+  const confirmation = $('profile-password-confirm').value;
+  if (!password || password.length < 8) {
+    $('profile-password-status').textContent = 'Usa minimo 8 caracteres.';
+    return;
+  }
+  if (password !== confirmation) {
+    $('profile-password-status').textContent = 'Las contraseñas no coinciden.';
+    return;
+  }
+  $('profile-password-save').disabled = true;
+  const { error } = await supabase.auth.updateUser({ password });
+  $('profile-password-save').disabled = false;
+  if (error) {
+    console.warn('Cambio de contraseña fallido:', error.message);
+    $('profile-password-status').textContent = 'No se pudo actualizar.';
+    return;
+  }
+  appendAudit('usuarios', currentUserId(), 'Cambio de contraseña propia', '', 'Contraseña actualizada', `Usuario ${currentUserName()} actualizo su contraseña.`, currentUserName());
+  $('password-modal').close();
+  showToast('Contraseña actualizada.');
 }
 
 async function resetPassword() {
@@ -635,6 +710,7 @@ function updateAuthUi() {
     ? 'Ingresa tus credenciales.'
     : 'Configura Supabase en Vercel.');
   $('auth-user').textContent = email || 'Sin sesion';
+  $('change-password-open').hidden = !email;
   $('auth-logout').hidden = !email;
   updateNavigationAccess();
 }
@@ -2711,6 +2787,7 @@ function renderUsers() {
             <th>Rol</th>
             <th>Estado</th>
             <th>Actualizado</th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -2735,8 +2812,11 @@ function renderUsers() {
                 </select>
               </td>
               <td>${escapeHtml(formatLimaDateTime(profile.actualizado_en || profile.creado_en || ''))}</td>
+              <td>
+                <button class="secondary compact-action" type="button" data-send-recovery="${profile.id_local || profile.id}">Enviar recuperación</button>
+              </td>
             </tr>
-          `).join('') : '<tr><td class="empty" colspan="5">No hay perfiles.</td></tr>'}
+          `).join('') : '<tr><td class="empty" colspan="6">No hay perfiles.</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -2744,6 +2824,7 @@ function renderUsers() {
   container.querySelectorAll('[data-user-role]').forEach((select) => select.addEventListener('change', () => updateUserProfile(select.dataset.userRole, { rol: select.value })));
   container.querySelectorAll('[data-user-active]').forEach((select) => select.addEventListener('change', () => updateUserProfile(select.dataset.userActive, { activo: select.value === 'true' })));
   container.querySelectorAll('[data-user-name]').forEach((input) => input.addEventListener('change', () => updateUserProfile(input.dataset.userName, { nombre: input.value.trim() })));
+  container.querySelectorAll('[data-send-recovery]').forEach((button) => button.addEventListener('click', () => sendUserRecovery(button.dataset.sendRecovery)));
 }
 
 async function addUserProfile() {
@@ -2787,6 +2868,26 @@ async function updateUserProfile(id, changes) {
   await safeSupabaseWrite('perfil de usuario', () => supabase.from('perfiles_usuario').upsert(mapProfileToDb(updated), { onConflict: 'correo' }));
   appendAudit('usuarios', updated.id_local || updated.id, 'Actualizacion de rol/perfil', before.rol, updated.rol, `Usuario ${updated.correo}: rol ${before.rol} -> ${updated.rol}; estado ${before.activo !== false ? 'Activo' : 'Inactivo'} -> ${updated.activo !== false ? 'Activo' : 'Inactivo'}.`, updated.correo);
   renderAll();
+}
+
+async function sendUserRecovery(id) {
+  if (!isAdmin() || !supabaseReady()) return;
+  const profile = userProfiles.find((item) => (item.id_local || item.id) === id);
+  if (!profile?.correo) return;
+  if (profile.activo === false) {
+    showToast('Usuario inactivo.');
+    return;
+  }
+  const { error } = await supabase.auth.resetPasswordForEmail(profile.correo, {
+    redirectTo: `${window.location.origin}/`,
+  });
+  if (error) {
+    console.warn('No se pudo enviar recuperacion:', error.message);
+    showToast('No se pudo enviar.');
+    return;
+  }
+  appendAudit('usuarios', profile.id_local || profile.id, 'Envio de recuperacion de contraseña', '', 'Correo enviado', `Administrador ${currentUserName()} envio recuperacion a ${profile.correo}.`, profile.correo);
+  showToast('Correo enviado.');
 }
 
 function applyPermissionState() {

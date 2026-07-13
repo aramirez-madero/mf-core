@@ -64,6 +64,7 @@
           </div>
           <div class="auth-panel" id="auth-panel">
             <span id="auth-user">Sin sesion</span>
+            <button class="secondary" id="change-password-open" type="button" hidden>Cambiar contrase&ntilde;a</button>
             <button class="secondary" id="auth-logout" type="button" hidden>Salir</button>
           </div>
         </header>
@@ -303,6 +304,33 @@
         <div class="summary" id="error-message"></div>
         <menu class="modal-actions">
           <button class="primary" value="default">Entendido</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="password-modal">
+      <form method="dialog" class="modal-card">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Seguridad</p>
+            <h3>Cambiar contrase&ntilde;a</h3>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Cerrar">x</button>
+        </div>
+        <div class="form-grid">
+          <label>
+            <span>Nueva contrase&ntilde;a</span>
+            <input id="profile-password" type="password" autocomplete="new-password" />
+          </label>
+          <label>
+            <span>Confirmar contrase&ntilde;a</span>
+            <input id="profile-password-confirm" type="password" autocomplete="new-password" />
+          </label>
+          <div class="form-warning" id="profile-password-status"></div>
+        </div>
+        <menu class="modal-actions">
+          <button class="secondary" value="cancel">Cancelar</button>
+          <button class="primary" id="profile-password-save" value="default">Guardar</button>
         </menu>
       </form>
     </dialog>
