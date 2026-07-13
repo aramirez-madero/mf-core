@@ -252,9 +252,9 @@ async function boot() {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) void enforceActiveProfile();
   });
-  document.addEventListener('click', closeProfileMenuOnOutsideClick);
+  document.addEventListener('click', closeMenusOnOutsideClick);
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeProfileMenu();
+    if (event.key === 'Escape') closeMenus();
   });
   document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', (event) => {
     event.preventDefault();
@@ -3015,6 +3015,28 @@ function closeProfileMenuOnOutsideClick(event) {
 function closeProfileMenu() {
   const menu = $('profile-menu');
   if (menu) menu.open = false;
+}
+
+function closeRowMenusOnOutsideClick(event) {
+  document.querySelectorAll('.row-menu[open]').forEach((menu) => {
+    if (!menu.contains(event.target)) menu.open = false;
+  });
+}
+
+function closeRowMenus() {
+  document.querySelectorAll('.row-menu[open]').forEach((menu) => {
+    menu.open = false;
+  });
+}
+
+function closeMenusOnOutsideClick(event) {
+  closeProfileMenuOnOutsideClick(event);
+  closeRowMenusOnOutsideClick(event);
+}
+
+function closeMenus() {
+  closeProfileMenu();
+  closeRowMenus();
 }
 
 function openRecordModal(type, scope, id) {
