@@ -196,35 +196,47 @@ body.auth-locked .app-shell { display: none; }
   width: min(980px, 100%);
 }
 .workflow-notice {
-  display: grid;
-  gap: 4px;
-  margin: 14px 0;
-  padding: 13px 15px;
+  display: inline-flex;
+  align-items: center;
+  margin: 10px 0;
+  padding: 8px 11px;
   border: 1px solid #bfdbfe;
-  border-left: 5px solid var(--accent);
+  border-left: 4px solid var(--accent);
   border-radius: 8px;
   background: #eff6ff;
   color: var(--primary-dark);
+  font-size: 13px;
 }
 .workflow-notice span { color: #52637a; font-size: 13px; }
 .bulk-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin: 12px 0;
+  margin: 8px 0 10px;
 }
 .select-all-row {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 9px 12px;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 10px;
   border: 1px solid #cfe0ef;
   border-radius: 8px;
   background: #ffffff;
   color: var(--primary-dark);
   font-weight: 800;
+  font-size: 13px;
+}
+.selection-count {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+.compact-action {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
 }
 .select-all-row input,
 .row-check {
@@ -385,7 +397,7 @@ textarea { min-height: 86px; resize: vertical; }
   min-width: 900px;
 }
 .generated-annex-table {
-  min-width: 1280px;
+  min-width: 1180px;
   table-layout: fixed;
 }
 .control-table {
@@ -473,7 +485,7 @@ textarea { min-height: 86px; resize: vertical; }
 .generated-annex-table td:nth-child(4),
 .generated-annex-table th:nth-child(5),
 .generated-annex-table td:nth-child(5) {
-  width: 220px;
+  width: 225px;
   min-width: 0;
 }
 .generated-annex-table th:nth-child(6),
@@ -487,7 +499,7 @@ textarea { min-height: 86px; resize: vertical; }
 }
 .generated-annex-table th:nth-child(9),
 .generated-annex-table td:nth-child(9) {
-  width: 188px;
+  width: 78px;
   text-align: center;
 }
 .generated-annex-table th:nth-child(8),
@@ -533,13 +545,13 @@ textarea { min-height: 86px; resize: vertical; }
 .row-menu summary {
   display: inline-grid;
   place-items: center;
-  width: 38px;
+  width: 34px;
   height: 34px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
   color: var(--primary-dark);
-  font-size: 22px;
+  font-size: 19px;
   line-height: 1;
   cursor: pointer;
   list-style: none;

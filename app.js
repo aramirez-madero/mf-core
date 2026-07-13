@@ -2103,21 +2103,21 @@ function renderGeneratedAnnexes() {
   const cancelledCount = (state.annexRows || []).filter(isAnnexCancelled).length;
   const selectedRows = rows.filter((row) => state.annexSelectedIds.has(row.id));
   const selectedPendingRows = selectedRows.filter(isAnnexPendingControl);
-  const allPendingRowsSelected = rows.some(isAnnexPendingControl) && rows.filter(isAnnexPendingControl).every((row) => state.annexSelectedIds.has(row.id));
+  const allVisibleRowsSelected = rows.length > 0 && rows.every((row) => state.annexSelectedIds.has(row.id));
   container.innerHTML = `
     ${pendingRows.length ? `
       <div class="workflow-notice">
-        <strong>${pendingRows.length} anexos pendientes de Control</strong>
-        <span>Selecciona los anexos revisados y usa "Pasar seleccionados a Control". Si un anexo ya no corresponde, cancélalo para conservar el correlativo y la trazabilidad.</span>
+        <strong>${pendingRows.length} pendientes de Control</strong>
       </div>
     ` : ''}
-    <div class="bulk-actions">
+    <div class="bulk-actions ${selectedRows.length ? 'has-selection' : ''}">
       <label class="select-all-row">
-        <input type="checkbox" id="select-pending-annexes" ${allPendingRowsSelected ? 'checked' : ''} />
-        Seleccionar pendientes visibles
+        <input type="checkbox" id="select-visible-annexes" ${allVisibleRowsSelected ? 'checked' : ''} />
+        Seleccionar visibles
       </label>
-      <button class="secondary" type="button" id="bulk-send-control" ${selectedPendingRows.length ? '' : 'disabled'}>Pasar seleccionados a Control</button>
-      <button class="danger" type="button" id="bulk-cancel-annexes" ${selectedPendingRows.length ? '' : 'disabled'}>Cancelar seleccionados</button>
+      ${selectedRows.length ? `<span class="selection-count">${selectedRows.length} seleccionados</span>` : ''}
+      ${selectedPendingRows.length ? `<button class="secondary compact-action" type="button" id="bulk-send-control">Pasar a Control</button>` : ''}
+      ${selectedPendingRows.length ? `<button class="danger compact-action" type="button" id="bulk-cancel-annexes">Cancelar</button>` : ''}
     </div>
     <div class="list-toolbar">
       <span>${rows.length} anexos encontrados</span>
@@ -2142,9 +2142,7 @@ function renderGeneratedAnnexes() {
           ${rows.length ? rows.map((row) => `
             <tr class="${isAnnexCancelled(row) ? 'is-cancelled' : ''}">
               <td>
-                ${isAnnexPendingControl(row)
-                  ? `<input class="row-check" type="checkbox" aria-label="Seleccionar anexo ${escapeHtml(annexCode(row))}" data-select-annex="${row.id}" ${state.annexSelectedIds.has(row.id) ? 'checked' : ''} />`
-                  : ''}
+                <input class="row-check" type="checkbox" aria-label="Seleccionar anexo ${escapeHtml(annexCode(row))}" data-select-annex="${row.id}" ${state.annexSelectedIds.has(row.id) ? 'checked' : ''} />
               </td>
               <td>
                 <strong>${escapeHtml(annexCode(row))}</strong>
@@ -2164,7 +2162,7 @@ function renderGeneratedAnnexes() {
               <td>${annexControlBadge(row.estado_control || row.estado_validacion || row.estado)}</td>
               <td class="actions">
                 <details class="row-menu">
-                  <summary aria-label="Opciones del anexo">⋯</summary>
+                  <summary aria-label="Opciones del anexo">&vellip;</summary>
                   <div class="row-menu-panel">
                     <button type="button" data-view-annex="${row.id}">Ver anexo</button>
                     <button type="button" data-download-annex="${row.id}">Descargar PDF</button>
@@ -2178,8 +2176,8 @@ function renderGeneratedAnnexes() {
       </table>
     </div>
   `;
-  container.querySelector('#select-pending-annexes')?.addEventListener('change', (event) => {
-    rows.filter(isAnnexPendingControl).forEach((row) => {
+  container.querySelector('#select-visible-annexes')?.addEventListener('change', (event) => {
+    rows.forEach((row) => {
       if (event.target.checked) state.annexSelectedIds.add(row.id);
       else state.annexSelectedIds.delete(row.id);
     });
