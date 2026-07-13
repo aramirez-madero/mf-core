@@ -54,6 +54,22 @@
           <a class="nav-item" href="/auditoria" data-module="auditoria">Auditoria</a>
           <a class="nav-item" href="/usuarios" data-module="usuarios">Usuarios</a>
         </nav>
+
+        <div class="auth-panel" id="auth-panel">
+          <details class="profile-menu" id="profile-menu" hidden>
+            <summary aria-label="Perfil">
+              <span class="profile-avatar" id="profile-avatar">U</span>
+              <span class="profile-meta">
+                <strong id="auth-user">Sin sesion</strong>
+                <small id="auth-role">Usuario</small>
+              </span>
+            </summary>
+            <div class="profile-menu-panel">
+              <button id="change-password-open" type="button">Cambiar contrase&ntilde;a</button>
+              <button id="auth-logout" type="button">Salir</button>
+            </div>
+          </details>
+        </div>
       </aside>
 
       <main class="workspace">
@@ -61,21 +77,6 @@
           <div>
             <p class="eyebrow" id="module-kicker">Documentos</p>
             <h1 id="module-title">Anexos</h1>
-          </div>
-          <div class="auth-panel" id="auth-panel">
-            <details class="profile-menu" id="profile-menu" hidden>
-              <summary aria-label="Perfil">
-                <span class="profile-avatar" id="profile-avatar">U</span>
-                <span class="profile-meta">
-                  <strong id="auth-user">Sin sesion</strong>
-                  <small id="auth-role">Usuario</small>
-                </span>
-              </summary>
-              <div class="profile-menu-panel">
-                <button id="change-password-open" type="button">Cambiar contrase&ntilde;a</button>
-                <button id="auth-logout" type="button">Salir</button>
-              </div>
-            </details>
           </div>
         </header>
 
