@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
+const MADERO_LOGO_URL = new URL('./assets/logos/mf-logo.jpg', import.meta.url).href;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
@@ -1942,6 +1943,7 @@ function cancelPreviewImport() {
 }
 
 function buildAnnexHtml(row) {
+  const logoUrl = assetUrl('assets/logos/mf-logo.jpg');
   const amount = new Intl.NumberFormat('es-PE', { style: 'currency', currency: row.moneda === 'USD' ? 'USD' : 'PEN' }).format(Number(row.monto_neto_pago) || 0);
   const disburse = new Intl.NumberFormat('es-PE', { style: 'currency', currency: row.moneda === 'USD' ? 'USD' : 'PEN' }).format(Number(row.monto_desembolsar) || 0);
   return `<!doctype html>
@@ -3018,6 +3020,7 @@ function normalizeAnnexAssets(html) {
 }
 
 function assetUrl(path) {
+  if (String(path).replace(/^\/+/, '') === 'assets/logos/mf-logo.jpg') return MADERO_LOGO_URL;
   return `${window.location.origin}/${String(path).replace(/^\/+/, '')}`;
 }
 
