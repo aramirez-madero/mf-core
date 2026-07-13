@@ -105,7 +105,7 @@ La app no usa `service_role` en el navegador. Por seguridad, la creacion real de
 Roles disponibles:
 
 - `administrador`: acceso total y gestion de usuarios.
-- `operaciones`: genera anexos, ve maestros, ve Control, pasa anexos a Control, puede cancelar anexos pendientes y consulta Auditoria.
+- `operaciones`: acceso operativo completo a Anexos, Maestros, Control y Auditoria. No puede ver ni gestionar Usuarios.
 - `control`: revisa anexos y puede pasarlos a Control.
 - `consulta`: solo consulta operativa.
 - `auditoria`: acceso a auditoria/trazabilidad.
