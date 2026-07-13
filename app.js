@@ -174,7 +174,9 @@ let state = {
   annexTab: 'generar',
   annexGeneratedSearch: '',
   annexGeneratedDate: '',
+  annexGeneratedStatus: '',
   annexGeneratedSort: 'fecha_desc',
+  annexSelectedIds: new Set(),
   activeMaster: 'adquirentes',
   masterSearch: '',
   masterPage: 1,
@@ -275,6 +277,11 @@ async function boot() {
     state.annexGeneratedDate = event.target.value;
     renderGeneratedAnnexes();
   });
+  $('annex-generated-status').addEventListener('change', (event) => {
+    state.annexGeneratedStatus = event.target.value;
+    state.annexSelectedIds.clear();
+    renderGeneratedAnnexes();
+  });
   $('annex-generated-sort').addEventListener('change', (event) => {
     state.annexGeneratedSort = event.target.value;
     renderGeneratedAnnexes();
@@ -282,9 +289,12 @@ async function boot() {
   $('clear-annex-generated-filters').addEventListener('click', () => {
     state.annexGeneratedSearch = '';
     state.annexGeneratedDate = '';
+    state.annexGeneratedStatus = '';
     state.annexGeneratedSort = 'fecha_desc';
+    state.annexSelectedIds.clear();
     $('annex-generated-search').value = '';
     $('annex-generated-date').value = '';
+    $('annex-generated-status').value = '';
     $('annex-generated-sort').value = 'fecha_desc';
     renderGeneratedAnnexes();
   });
@@ -2089,16 +2099,35 @@ function renderGeneratedAnnexes() {
   const container = $('annex-generated-editor');
   if (!container) return;
   const rows = sortGeneratedAnnexes(filterGeneratedAnnexes(state.annexRows || []));
-  const pendingCount = (state.annexRows || []).filter((row) => row.estado_control !== 'En Control').length;
+  const pendingRows = (state.annexRows || []).filter(isAnnexPendingControl);
+  const cancelledCount = (state.annexRows || []).filter(isAnnexCancelled).length;
+  const selectedRows = rows.filter((row) => state.annexSelectedIds.has(row.id));
+  const selectedPendingRows = selectedRows.filter(isAnnexPendingControl);
+  const allPendingRowsSelected = rows.some(isAnnexPendingControl) && rows.filter(isAnnexPendingControl).every((row) => state.annexSelectedIds.has(row.id));
   container.innerHTML = `
+    ${pendingRows.length ? `
+      <div class="workflow-notice">
+        <strong>${pendingRows.length} anexos pendientes de Control</strong>
+        <span>Selecciona los anexos revisados y usa "Pasar seleccionados a Control". Si un anexo ya no corresponde, cancélalo para conservar el correlativo y la trazabilidad.</span>
+      </div>
+    ` : ''}
+    <div class="bulk-actions">
+      <label class="select-all-row">
+        <input type="checkbox" id="select-pending-annexes" ${allPendingRowsSelected ? 'checked' : ''} />
+        Seleccionar pendientes visibles
+      </label>
+      <button class="secondary" type="button" id="bulk-send-control" ${selectedPendingRows.length ? '' : 'disabled'}>Pasar seleccionados a Control</button>
+      <button class="danger" type="button" id="bulk-cancel-annexes" ${selectedPendingRows.length ? '' : 'disabled'}>Cancelar seleccionados</button>
+    </div>
     <div class="list-toolbar">
       <span>${rows.length} anexos encontrados</span>
-      <span>Pendientes de Control: ${pendingCount}</span>
+      <span>Pendientes: ${pendingRows.length} · Cancelados: ${cancelledCount}</span>
     </div>
     <div class="table-wrap">
       <table class="data-table generated-annex-table">
         <thead>
           <tr>
+            <th></th>
             <th>Codigo anexo</th>
             <th>Fecha gen.</th>
             <th>Cliente</th>
@@ -2111,7 +2140,12 @@ function renderGeneratedAnnexes() {
         </thead>
         <tbody>
           ${rows.length ? rows.map((row) => `
-            <tr>
+            <tr class="${isAnnexCancelled(row) ? 'is-cancelled' : ''}">
+              <td>
+                ${isAnnexPendingControl(row)
+                  ? `<input class="row-check" type="checkbox" aria-label="Seleccionar anexo ${escapeHtml(annexCode(row))}" data-select-annex="${row.id}" ${state.annexSelectedIds.has(row.id) ? 'checked' : ''} />`
+                  : ''}
+              </td>
               <td>
                 <strong>${escapeHtml(annexCode(row))}</strong>
                 <small>Op. ${escapeHtml(row.operacion || '-')}</small>
@@ -2129,20 +2163,39 @@ function renderGeneratedAnnexes() {
               <td class="num">${money.format(Number(row.total_monto_descontado || row.monto_descontado || row.monto_desembolsar) || 0)}</td>
               <td>${annexControlBadge(row.estado_control || row.estado_validacion || row.estado)}</td>
               <td class="actions">
-                <button class="icon-action" title="Ver anexo" aria-label="Ver anexo" data-view-annex="${row.id}">${iconView()}</button>
-                <button class="icon-action" title="Descargar PDF" aria-label="Descargar PDF" data-download-annex="${row.id}">${iconDownload()}</button>
-                ${row.estado_control === 'En Control'
-                  ? ''
-                  : `<button class="small-button" type="button" title="Pasar a Control" data-send-control="${row.id}">Pasar</button>`}
+                <details class="row-menu">
+                  <summary aria-label="Opciones del anexo">⋯</summary>
+                  <div class="row-menu-panel">
+                    <button type="button" data-view-annex="${row.id}">Ver anexo</button>
+                    <button type="button" data-download-annex="${row.id}">Descargar PDF</button>
+                    ${isAnnexPendingControl(row) ? `<button type="button" data-send-control="${row.id}">Pasar a Control</button>` : ''}
+                    ${isAnnexPendingControl(row) ? `<button class="danger-text" type="button" data-cancel-annex="${row.id}">Cancelar anexo</button>` : ''}
+                  </div>
+                </details>
               </td>
-            </tr>`).join('') : '<tr><td class="empty" colspan="8">No hay anexos generados.</td></tr>'}
+            </tr>`).join('') : '<tr><td class="empty" colspan="9">No hay anexos generados.</td></tr>'}
         </tbody>
       </table>
     </div>
   `;
+  container.querySelector('#select-pending-annexes')?.addEventListener('change', (event) => {
+    rows.filter(isAnnexPendingControl).forEach((row) => {
+      if (event.target.checked) state.annexSelectedIds.add(row.id);
+      else state.annexSelectedIds.delete(row.id);
+    });
+    renderGeneratedAnnexes();
+  });
+  container.querySelectorAll('[data-select-annex]').forEach((input) => input.addEventListener('change', () => {
+    if (input.checked) state.annexSelectedIds.add(input.dataset.selectAnnex);
+    else state.annexSelectedIds.delete(input.dataset.selectAnnex);
+    renderGeneratedAnnexes();
+  }));
+  container.querySelector('#bulk-send-control')?.addEventListener('click', () => sendSelectedAnnexesToControl());
+  container.querySelector('#bulk-cancel-annexes')?.addEventListener('click', () => cancelSelectedAnnexes());
   container.querySelectorAll('[data-view-annex]').forEach((button) => button.addEventListener('click', () => openGeneratedAnnex(button.dataset.viewAnnex)));
   container.querySelectorAll('[data-download-annex]').forEach((button) => button.addEventListener('click', () => openGeneratedAnnex(button.dataset.downloadAnnex, true)));
   container.querySelectorAll('[data-send-control]').forEach((button) => button.addEventListener('click', () => confirmAnnexToControl(button.dataset.sendControl)));
+  container.querySelectorAll('[data-cancel-annex]').forEach((button) => button.addEventListener('click', () => cancelAnnex(button.dataset.cancelAnnex)));
 }
 
 function filterGeneratedAnnexes(rows) {
@@ -2150,7 +2203,11 @@ function filterGeneratedAnnexes(rows) {
   return rows.filter((row) => {
     const matchesQuery = !query || ['operacion', 'cliente', 'ruc_cliente', 'obligado', 'ruc_obligado', 'moneda', 'estado', 'estado_control'].some((field) => normalizeHeader(row[field]).includes(query));
     const matchesDate = !state.annexGeneratedDate || formatDateOnly(row.fecha_generacion) === state.annexGeneratedDate;
-    return matchesQuery && matchesDate;
+    const matchesStatus = !state.annexGeneratedStatus
+      || (state.annexGeneratedStatus === 'pendiente' && isAnnexPendingControl(row))
+      || (state.annexGeneratedStatus === 'control' && row.estado_control === 'En Control')
+      || (state.annexGeneratedStatus === 'cancelado' && isAnnexCancelled(row));
+    return matchesQuery && matchesDate && matchesStatus;
   });
 }
 
@@ -2169,9 +2226,17 @@ function sortGeneratedAnnexes(rows) {
 function confirmAnnexToControl(id) {
   const annex = state.annexRows.find((row) => row.id === id);
   if (!annex) return;
-  if (annex.estado_control === 'En Control') return;
-  if (!confirm(`Pasar el anexo ${annex.operacion || id} a Control?`)) return;
+  if (!isAnnexPendingControl(annex)) return;
+  if (!confirm(`Pasar el anexo ${annex.operacion || id} a Control?\n\nEsto confirma que el anexo esta revisado y lo movera al modulo Control.`)) return;
+  sendAnnexToControl(annex);
+  state.annexSelectedIds.delete(id);
+  save(STORAGE.control, state.controlRows);
+  save(STORAGE.annexes, state.annexRows);
+  appendAudit('control', id, 'Confirmacion de pase a Control', 'Pendiente de pasar a Control', 'En Control', `Anexo ${annex.operacion || id} confirmado para Control.`, annex.operacion || id);
+  renderAll();
+}
 
+function sendAnnexToControl(annex) {
   const controlRecord = {
     ...annex,
     estado_control: 'En Control',
@@ -2181,12 +2246,56 @@ function confirmAnnexToControl(id) {
     usuario_pase_control: 'usuario.local',
   };
 
-  state.controlRows = [controlRecord, ...state.controlRows.filter((row) => row.id !== id)];
-  state.annexRows = state.annexRows.map((row) => row.id === id ? controlRecord : row);
+  state.controlRows = [controlRecord, ...state.controlRows.filter((row) => row.id !== annex.id)];
+  state.annexRows = state.annexRows.map((row) => row.id === annex.id ? controlRecord : row);
+}
+
+function sendSelectedAnnexesToControl() {
+  const selected = state.annexRows.filter((row) => state.annexSelectedIds.has(row.id) && isAnnexPendingControl(row));
+  if (!selected.length) return;
+  if (!confirm(`Pasar ${selected.length} anexos seleccionados a Control?\n\nSolo se pasaran anexos pendientes.`)) return;
+  selected.forEach((annex) => {
+    sendAnnexToControl(annex);
+    appendAudit('control', annex.id, 'Pase masivo a Control', 'Pendiente de pasar a Control', 'En Control', `Anexo ${annex.operacion || annex.id} confirmado masivamente para Control.`, annex.operacion || annex.id);
+    state.annexSelectedIds.delete(annex.id);
+  });
   save(STORAGE.control, state.controlRows);
   save(STORAGE.annexes, state.annexRows);
-  appendAudit('control', id, 'Confirmacion de pase a Control', 'Pendiente de pasar a Control', 'En Control', `Anexo ${annex.operacion || id} confirmado para Control.`, annex.operacion || id);
   renderAll();
+}
+
+function cancelAnnex(id) {
+  const annex = state.annexRows.find((row) => row.id === id);
+  if (!annex || !isAnnexPendingControl(annex)) return;
+  if (!confirm(`Cancelar el anexo ${annex.operacion || id}?\n\nNo se borrara. El correlativo quedara consumido y se guardara la trazabilidad.`)) return;
+  cancelAnnexRows([annex]);
+  renderAll();
+}
+
+function cancelSelectedAnnexes() {
+  const selected = state.annexRows.filter((row) => state.annexSelectedIds.has(row.id) && isAnnexPendingControl(row));
+  if (!selected.length) return;
+  if (!confirm(`Cancelar ${selected.length} anexos seleccionados?\n\nNo se borraran. Sus correlativos quedaran consumidos para trazabilidad.`)) return;
+  cancelAnnexRows(selected);
+  renderAll();
+}
+
+function cancelAnnexRows(rows) {
+  const cancelledAt = new Date().toISOString();
+  rows.forEach((annex) => {
+    const cancelled = {
+      ...annex,
+      estado_control: 'Cancelado',
+      estado_validacion: 'Cancelado',
+      estado: 'Cancelado',
+      fecha_cancelacion: cancelledAt,
+      usuario_cancelacion: currentUserName(),
+    };
+    state.annexRows = state.annexRows.map((row) => row.id === annex.id ? cancelled : row);
+    state.annexSelectedIds.delete(annex.id);
+    appendAudit('anexos', annex.id, rows.length > 1 ? 'Cancelacion masiva de anexo' : 'Cancelacion de anexo', 'Pendiente de pasar a Control', 'Cancelado', `Anexo ${annex.operacion || annex.id} cancelado. Correlativo conservado para trazabilidad.`, annex.operacion || annex.id);
+  });
+  save(STORAGE.annexes, state.annexRows);
 }
 
 function renderMasters() {
@@ -3158,9 +3267,17 @@ function badge(status) {
 
 function annexControlBadge(status) {
   const normalized = status || 'Pendiente de pasar a Control';
-  const label = normalized === 'En Control' ? 'En Control' : 'Pendiente';
-  const tone = normalized === 'En Control' ? 'ok' : 'info';
+  const label = normalized === 'En Control' ? 'En Control' : normalized === 'Cancelado' ? 'Cancelado' : 'Pendiente';
+  const tone = normalized === 'En Control' ? 'ok' : normalized === 'Cancelado' ? 'bad' : 'info';
   return `<span class="badge ${tone}" title="${escapeHtml(normalized)}">${escapeHtml(label)}</span>`;
+}
+
+function isAnnexCancelled(row) {
+  return row?.estado_control === 'Cancelado' || row?.estado_validacion === 'Cancelado' || row?.estado === 'Cancelado';
+}
+
+function isAnnexPendingControl(row) {
+  return row && row.estado_control !== 'En Control' && !isAnnexCancelled(row);
 }
 
 function statusBadge(status) {
