@@ -6,6 +6,8 @@ const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, 
 let currentSession = null;
 let passwordRecoveryMode = false;
 let authNotice = '';
+let currentProfile = null;
+let userProfiles = [];
 
 const STORAGE = {
   master: 'mf_core_master_data_v2',
@@ -16,6 +18,37 @@ const STORAGE = {
   counters: 'mf_core_counters_v1',
   annexParams: 'mf_core_annex_params_v1',
   migrations: 'mf_core_migrations_v1',
+};
+
+const ROLE_LABELS = {
+  administrador: 'Administrador',
+  operaciones: 'Operaciones',
+  control: 'Control',
+  consulta: 'Consulta',
+  auditoria: 'Auditoria',
+};
+
+const ROLE_PERMISSIONS = {
+  administrador: {
+    modules: ['anexos', 'maestros', 'control', 'auditoria', 'usuarios'],
+    actions: ['generate_annexes', 'send_control', 'cancel_annexes', 'edit_masters', 'view_audit', 'manage_users'],
+  },
+  operaciones: {
+    modules: ['anexos', 'maestros'],
+    actions: ['generate_annexes', 'cancel_annexes'],
+  },
+  control: {
+    modules: ['anexos', 'control'],
+    actions: ['send_control'],
+  },
+  consulta: {
+    modules: ['anexos', 'control'],
+    actions: [],
+  },
+  auditoria: {
+    modules: ['auditoria'],
+    actions: ['view_audit'],
+  },
 };
 
 const DEFAULT_ANNEX_PARAMS = {
@@ -157,6 +190,7 @@ const MODULE_ROUTES = {
   maestros: '/maestros',
   control: '/control',
   auditoria: '/auditoria',
+  usuarios: '/usuarios',
 };
 
 const ROUTE_MODULES = {
@@ -167,6 +201,7 @@ const ROUTE_MODULES = {
   '/maestros': { module: 'maestros' },
   '/control': { module: 'control' },
   '/auditoria': { module: 'auditoria' },
+  '/usuarios': { module: 'usuarios' },
 };
 
 let state = {
@@ -301,6 +336,7 @@ async function boot() {
   $('login-form').addEventListener('submit', signIn);
   $('auth-reset').addEventListener('click', resetPassword);
   $('auth-logout').addEventListener('click', signOut);
+  $('add-user-profile').addEventListener('click', addUserProfile);
   $('add-master').addEventListener('click', () => openRecordModal('master', state.activeMaster, null));
   $('export-control-format').addEventListener('change', (event) => {
     if (!event.target.value) return;
@@ -374,6 +410,7 @@ function pushRoute(moduleName, annexTab) {
 
 function switchModule(moduleName, options = {}) {
   if (!MODULE_ROUTES[moduleName]) moduleName = 'anexos';
+  if (!canAccessModule(moduleName)) moduleName = firstAllowedModule();
   state.module = moduleName;
   if (moduleName === 'anexos' && options.resetAnnexTab !== false && state.annexTab !== 'generar') {
     switchAnnexTab('generar', { updateRoute: false });
@@ -385,6 +422,7 @@ function switchModule(moduleName, options = {}) {
     maestros: ['Datos base', 'Maestros'],
     control: ['Base operativa', 'Control'],
     auditoria: ['Trazabilidad', 'Auditoria'],
+    usuarios: ['Accesos', 'Usuarios'],
   };
   $('module-kicker').textContent = titles[moduleName][0];
   $('module-title').textContent = titles[moduleName][1];
@@ -408,6 +446,14 @@ async function initializeAuth() {
   const { data } = await supabase.auth.getSession();
   currentSession = data.session;
   if (!currentSession) clearSensitiveLocalState();
+  if (currentSession) await loadUserProfiles();
+  if (currentSession && currentProfile?.activo === false) {
+    await supabase.auth.signOut();
+    currentSession = null;
+    currentProfile = null;
+    userProfiles = [];
+    authNotice = 'Usuario inactivo.';
+  }
   updateAuthUi();
   supabase.auth.onAuthStateChange(async (event, session) => {
     currentSession = session;
@@ -415,6 +461,18 @@ async function initializeAuth() {
       passwordRecoveryMode = true;
       authNotice = 'Ingresa tu nueva contraseña.';
       replacePublicRoute();
+    }
+    if (session && !passwordRecoveryMode) {
+      await loadUserProfiles();
+      if (currentProfile?.activo === false) {
+        await supabase.auth.signOut();
+        currentSession = null;
+        currentProfile = null;
+        userProfiles = [];
+        authNotice = 'Usuario inactivo.';
+        updateAuthUi();
+        return;
+      }
     }
     updateAuthUi();
     if (session && !passwordRecoveryMode) {
@@ -465,6 +523,16 @@ async function signIn(event) {
     return;
   }
   currentSession = data.session;
+  await loadUserProfiles();
+  if (currentProfile?.activo === false) {
+    await supabase.auth.signOut();
+    currentSession = null;
+    currentProfile = null;
+    userProfiles = [];
+    setLoginStatus('Usuario inactivo.');
+    updateAuthUi();
+    return;
+  }
   $('auth-password').value = '';
   setLoginStatus('Sesion iniciada.');
   updateAuthUi();
@@ -477,6 +545,8 @@ async function signOut() {
   if (!supabaseReady()) return;
   await supabase.auth.signOut();
   currentSession = null;
+  currentProfile = null;
+  userProfiles = [];
   passwordRecoveryMode = false;
   authNotice = '';
   clearSensitiveLocalState();
@@ -566,6 +636,7 @@ function updateAuthUi() {
     : 'Configura Supabase en Vercel.');
   $('auth-user').textContent = email || 'Sin sesion';
   $('auth-logout').hidden = !email;
+  updateNavigationAccess();
 }
 
 function setLoginStatus(message) {
@@ -574,11 +645,108 @@ function setLoginStatus(message) {
 }
 
 function currentUserName() {
-  return currentSession?.user?.email || 'usuario.local';
+  return currentProfile?.nombre || currentSession?.user?.email || 'usuario.local';
 }
 
 function currentUserId() {
   return currentSession?.user?.id || null;
+}
+
+function currentRole() {
+  return currentProfile?.rol || 'consulta';
+}
+
+function roleConfig(role = currentRole()) {
+  return ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.consulta;
+}
+
+function canAccessModule(moduleName) {
+  if (!currentSession) return true;
+  return roleConfig().modules.includes(moduleName);
+}
+
+function canDo(action) {
+  return roleConfig().actions.includes(action);
+}
+
+function isAdmin() {
+  return currentRole() === 'administrador';
+}
+
+function firstAllowedModule() {
+  return roleConfig().modules[0] || 'anexos';
+}
+
+function updateNavigationAccess() {
+  document.querySelectorAll('.nav-item').forEach((item) => {
+    item.hidden = currentSession ? !canAccessModule(item.dataset.module) : false;
+  });
+  if (currentSession && !canAccessModule(state.module)) {
+    switchModule(firstAllowedModule(), { updateRoute: true, resetAnnexTab: false });
+  }
+}
+
+async function loadUserProfiles() {
+  if (!supabaseReady() || !currentSession) return;
+  const email = currentSession.user.email || '';
+  const userId = currentUserId();
+  let profiles = await safeSupabaseRead('perfiles de usuario', () => supabase
+    .from('perfiles_usuario')
+    .select('*')
+    .order('creado_en', { ascending: true }));
+
+  let ownProfile = profiles.find((profile) => profile.usuario_id === userId)
+    || profiles.find((profile) => normalizeHeader(profile.correo) === normalizeHeader(email));
+
+  if (!ownProfile) {
+    const role = profiles.length ? 'consulta' : 'administrador';
+    ownProfile = {
+      id_local: crypto.randomUUID(),
+      usuario_id: userId,
+      correo: email,
+      nombre: email,
+      rol: role,
+      activo: true,
+    };
+    await safeSupabaseWrite('perfil de usuario', () => supabase.from('perfiles_usuario').upsert(mapProfileToDb(ownProfile), { onConflict: 'correo' }));
+    profiles = [...profiles, ownProfile];
+  } else if (!ownProfile.usuario_id && userId) {
+    ownProfile = { ...ownProfile, usuario_id: userId };
+    await safeSupabaseWrite('perfil de usuario', () => supabase.from('perfiles_usuario').upsert(mapProfileToDb(ownProfile), { onConflict: 'correo' }));
+    profiles = profiles.map((profile) => profile.correo === ownProfile.correo ? ownProfile : profile);
+  }
+
+  currentProfile = fromProfileDb(ownProfile);
+  userProfiles = profiles.map(fromProfileDb);
+}
+
+function fromProfileDb(row) {
+  const data = row?.datos_completos && typeof row.datos_completos === 'object' ? row.datos_completos : {};
+  return {
+    ...data,
+    id: data.id || row.id_local || row.id || crypto.randomUUID(),
+    id_local: row.id_local || data.id || row.id,
+    usuario_id: row.usuario_id || data.usuario_id || null,
+    correo: row.correo || data.correo || '',
+    nombre: row.nombre || data.nombre || '',
+    rol: row.rol || data.rol || 'consulta',
+    activo: row.activo !== false,
+    creado_en: row.creado_en || data.creado_en || '',
+    actualizado_en: row.actualizado_en || data.actualizado_en || '',
+    actualizado_por: row.actualizado_por || data.actualizado_por || '',
+  };
+}
+
+function mapProfileToDb(profile) {
+  return {
+    id_local: profile.id_local || profile.id || crypto.randomUUID(),
+    usuario_id: profile.usuario_id || null,
+    correo: profile.correo || '',
+    nombre: profile.nombre || profile.correo || '',
+    rol: profile.rol || 'consulta',
+    activo: profile.activo !== false,
+    datos_completos: rowData(profile),
+  };
 }
 
 function clearSensitiveLocalState() {
@@ -592,6 +760,7 @@ function clearSensitiveLocalState() {
 }
 
 async function handleMasterFile(event) {
+  if (!canDo('edit_masters')) return;
   const file = event.target.files[0];
   if (!file) return;
   try {
@@ -813,6 +982,7 @@ function peekNextReferidorCode() {
 }
 
 async function handleFile(event) {
+  if (!canDo('generate_annexes')) return;
   const file = event.target.files[0];
   if (!file) return;
   $('summary').textContent = 'Procesando archivo...';
@@ -1597,6 +1767,7 @@ function round2(value) {
 }
 
 function generateAnnexes() {
+  if (!canDo('generate_annexes')) return;
   const validRows = state.previewRows.filter((row) => ['Validado', 'Listo para generar'].includes(row.estado_validacion));
   if (!validRows.length) return;
   const generatedAt = new Date().toISOString();
@@ -2059,6 +2230,8 @@ function renderAll() {
   renderMasters();
   renderControl();
   renderAudit();
+  applyPermissionState();
+  renderUsers();
 }
 
 function renderMetrics() {
@@ -2103,6 +2276,8 @@ function renderGeneratedAnnexes() {
   const cancelledCount = (state.annexRows || []).filter(isAnnexCancelled).length;
   const selectedRows = rows.filter((row) => state.annexSelectedIds.has(row.id));
   const selectedPendingRows = selectedRows.filter(isAnnexPendingControl);
+  const canSendControl = canDo('send_control');
+  const canCancelAnnex = canDo('cancel_annexes');
   const allVisibleRowsSelected = rows.length > 0 && rows.every((row) => state.annexSelectedIds.has(row.id));
   container.innerHTML = `
     ${pendingRows.length ? `
@@ -2116,8 +2291,8 @@ function renderGeneratedAnnexes() {
         Seleccionar visibles
       </label>
       ${selectedRows.length ? `<span class="selection-count">${selectedRows.length} seleccionados</span>` : ''}
-      ${selectedPendingRows.length ? `<button class="secondary compact-action" type="button" id="bulk-send-control">Pasar a Control</button>` : ''}
-      ${selectedPendingRows.length ? `<button class="danger compact-action" type="button" id="bulk-cancel-annexes">Cancelar</button>` : ''}
+      ${selectedPendingRows.length && canSendControl ? `<button class="secondary compact-action" type="button" id="bulk-send-control">Pasar a Control</button>` : ''}
+      ${selectedPendingRows.length && canCancelAnnex ? `<button class="danger compact-action" type="button" id="bulk-cancel-annexes">Cancelar</button>` : ''}
     </div>
     <div class="list-toolbar">
       <span>${rows.length} anexos encontrados</span>
@@ -2166,8 +2341,8 @@ function renderGeneratedAnnexes() {
                   <div class="row-menu-panel">
                     <button type="button" data-view-annex="${row.id}">Ver anexo</button>
                     <button type="button" data-download-annex="${row.id}">Descargar PDF</button>
-                    ${isAnnexPendingControl(row) ? `<button type="button" data-send-control="${row.id}">Pasar a Control</button>` : ''}
-                    ${isAnnexPendingControl(row) ? `<button class="danger-text" type="button" data-cancel-annex="${row.id}">Cancelar anexo</button>` : ''}
+                    ${isAnnexPendingControl(row) && canSendControl ? `<button type="button" data-send-control="${row.id}">Pasar a Control</button>` : ''}
+                    ${isAnnexPendingControl(row) && canCancelAnnex ? `<button class="danger-text" type="button" data-cancel-annex="${row.id}">Cancelar anexo</button>` : ''}
                   </div>
                 </details>
               </td>
@@ -2248,6 +2423,7 @@ function sortGeneratedAnnexes(rows) {
 }
 
 function confirmAnnexToControl(id) {
+  if (!canDo('send_control')) return;
   const annex = state.annexRows.find((row) => row.id === id);
   if (!annex) return;
   if (!isAnnexPendingControl(annex)) return;
@@ -2275,6 +2451,7 @@ function sendAnnexToControl(annex) {
 }
 
 function sendSelectedAnnexesToControl() {
+  if (!canDo('send_control')) return;
   const selected = state.annexRows.filter((row) => state.annexSelectedIds.has(row.id) && isAnnexPendingControl(row));
   if (!selected.length) return;
   if (!confirm(`Pasar ${selected.length} anexos seleccionados a Control?\n\nSolo se pasaran anexos pendientes.`)) return;
@@ -2289,6 +2466,7 @@ function sendSelectedAnnexesToControl() {
 }
 
 function cancelAnnex(id) {
+  if (!canDo('cancel_annexes')) return;
   const annex = state.annexRows.find((row) => row.id === id);
   if (!annex || !isAnnexPendingControl(annex)) return;
   if (!confirm(`Cancelar el anexo ${annex.operacion || id}?\n\nNo se borrara. El correlativo quedara consumido y se guardara la trazabilidad.`)) return;
@@ -2297,6 +2475,7 @@ function cancelAnnex(id) {
 }
 
 function cancelSelectedAnnexes() {
+  if (!canDo('cancel_annexes')) return;
   const selected = state.annexRows.filter((row) => state.annexSelectedIds.has(row.id) && isAnnexPendingControl(row));
   if (!selected.length) return;
   if (!confirm(`Cancelar ${selected.length} anexos seleccionados?\n\nNo se borraran. Sus correlativos quedaran consumidos para trazabilidad.`)) return;
@@ -2513,6 +2692,111 @@ function filterAuditRows(rows) {
     filtered = filtered.filter((row) => limaDateKey(row.fecha_hora) === state.auditDateFilter);
   }
   return filtered;
+}
+
+function renderUsers() {
+  const container = $('users-editor');
+  if (!container) return;
+  if (!isAdmin()) {
+    container.innerHTML = '<div class="empty-notice">Solo administrador puede gestionar usuarios.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="table-wrap users-table-wrap">
+      <table class="data-table users-table">
+        <thead>
+          <tr>
+            <th>Correo</th>
+            <th>Nombre</th>
+            <th>Rol</th>
+            <th>Estado</th>
+            <th>Actualizado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${userProfiles.length ? userProfiles.map((profile) => `
+            <tr>
+              <td>
+                <strong>${escapeHtml(profile.correo || '-')}</strong>
+                <small>${escapeHtml(profile.usuario_id || 'Pendiente de primer ingreso')}</small>
+              </td>
+              <td>
+                <input class="user-name-input" data-user-name="${profile.id_local || profile.id}" value="${escapeHtml(profile.nombre || '')}" />
+              </td>
+              <td>
+                <select data-user-role="${profile.id_local || profile.id}">
+                  ${Object.entries(ROLE_LABELS).map(([value, label]) => `<option value="${value}" ${profile.rol === value ? 'selected' : ''}>${label}</option>`).join('')}
+                </select>
+              </td>
+              <td>
+                <select data-user-active="${profile.id_local || profile.id}" ${profile.usuario_id === currentUserId() ? 'disabled' : ''}>
+                  <option value="true" ${profile.activo !== false ? 'selected' : ''}>Activo</option>
+                  <option value="false" ${profile.activo === false ? 'selected' : ''}>Inactivo</option>
+                </select>
+              </td>
+              <td>${escapeHtml(formatLimaDateTime(profile.actualizado_en || profile.creado_en || ''))}</td>
+            </tr>
+          `).join('') : '<tr><td class="empty" colspan="5">No hay perfiles.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+  container.querySelectorAll('[data-user-role]').forEach((select) => select.addEventListener('change', () => updateUserProfile(select.dataset.userRole, { rol: select.value })));
+  container.querySelectorAll('[data-user-active]').forEach((select) => select.addEventListener('change', () => updateUserProfile(select.dataset.userActive, { activo: select.value === 'true' })));
+  container.querySelectorAll('[data-user-name]').forEach((input) => input.addEventListener('change', () => updateUserProfile(input.dataset.userName, { nombre: input.value.trim() })));
+}
+
+async function addUserProfile() {
+  if (!isAdmin()) return;
+  const correo = prompt('Correo del usuario creado en Supabase Auth:');
+  if (!correo) return;
+  const cleanEmail = correo.trim().toLowerCase();
+  if (!cleanEmail.includes('@')) {
+    showToast('Correo no valido.');
+    return;
+  }
+  if (userProfiles.some((profile) => normalizeHeader(profile.correo) === normalizeHeader(cleanEmail))) {
+    showToast('El perfil ya existe.');
+    return;
+  }
+  const profile = {
+    id: crypto.randomUUID(),
+    id_local: crypto.randomUUID(),
+    usuario_id: null,
+    correo: cleanEmail,
+    nombre: cleanEmail,
+    rol: 'consulta',
+    activo: true,
+    creado_en: limaTimestamp(),
+    actualizado_en: limaTimestamp(),
+  };
+  userProfiles.push(profile);
+  await safeSupabaseWrite('perfil de usuario', () => supabase.from('perfiles_usuario').upsert(mapProfileToDb(profile), { onConflict: 'correo' }));
+  appendAudit('usuarios', profile.id_local, 'Creacion de perfil', '', 'Consulta', `Perfil creado para ${cleanEmail}.`, cleanEmail);
+  renderUsers();
+}
+
+async function updateUserProfile(id, changes) {
+  if (!isAdmin()) return;
+  const existing = userProfiles.find((profile) => (profile.id_local || profile.id) === id);
+  if (!existing) return;
+  const before = { ...existing };
+  const updated = { ...existing, ...changes, actualizado_en: limaTimestamp(), actualizado_por: currentUserName() };
+  userProfiles = userProfiles.map((profile) => (profile.id_local || profile.id) === id ? updated : profile);
+  if (updated.usuario_id === currentUserId()) currentProfile = updated;
+  await safeSupabaseWrite('perfil de usuario', () => supabase.from('perfiles_usuario').upsert(mapProfileToDb(updated), { onConflict: 'correo' }));
+  appendAudit('usuarios', updated.id_local || updated.id, 'Actualizacion de rol/perfil', before.rol, updated.rol, `Usuario ${updated.correo}: rol ${before.rol} -> ${updated.rol}; estado ${before.activo !== false ? 'Activo' : 'Inactivo'} -> ${updated.activo !== false ? 'Activo' : 'Inactivo'}.`, updated.correo);
+  renderAll();
+}
+
+function applyPermissionState() {
+  const canGenerate = canDo('generate_annexes');
+  const canMaster = canDo('edit_masters');
+  $('file').disabled = !canGenerate;
+  $('generate-annexes').hidden = !canGenerate;
+  $('cancel-preview-import').hidden = !canGenerate;
+  $('add-master').hidden = !canMaster;
+  $('master-file').disabled = !canMaster;
 }
 
 function buildAuditDetail(before, after, fields) {

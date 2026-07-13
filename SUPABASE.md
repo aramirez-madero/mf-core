@@ -13,9 +13,9 @@ Supabase se usara primero solo para el flujo que ya existe en el sistema:
 - `cargas_importadas`: historial de archivos importados y cantidades procesadas.
 - `auditoria`: eventos visibles en la pestana Auditoria de la aplicacion.
 - `trazabilidad`: historial de acciones, cambios de estado y movimientos importantes.
+- `perfiles_usuario`: roles, estado y permisos de acceso por usuario.
 
-No se crean tablas para usuarios, configuracion ni reportes todavia.
-Eso se agregara cuando el sistema realmente lo use.
+Los usuarios se autentican con Supabase Auth y sus roles operativos se gestionan en `perfiles_usuario`.
 
 ## Guardado de maestros
 
@@ -36,7 +36,7 @@ La tabla `cargas_importadas` guarda el origen de la carga: modulo, tipo de maest
 
 La pestana Auditoria debe leer desde `auditoria`, no desde el navegador.
 
-La tabla `auditoria` guarda los eventos visibles para el usuario:
+La tabla `auditoria` guarda los eventos visibles para el usuario. La app muestra fecha y hora en horario de Peru (`America/Lima`):
 
 - entidad;
 - accion;
@@ -95,8 +95,20 @@ Para que la app pueda guardar en Supabase:
 1. Entrar a Supabase.
 2. Ir a `Authentication > Users`.
 3. Crear un usuario con correo y clave.
-4. Abrir MF Core.
-5. Iniciar sesion en la cabecera con ese correo y clave.
+4. Abrir MF Core con un usuario administrador.
+5. Ir a `Usuarios`.
+6. Agregar el correo creado y asignar rol.
+7. El usuario inicia sesion con ese correo y clave.
+
+La app no usa `service_role` en el navegador. Por seguridad, la creacion real del usuario sigue en Supabase Auth.
+
+Roles disponibles:
+
+- `administrador`: acceso total y gestion de usuarios.
+- `operaciones`: genera anexos, ve maestros y puede cancelar anexos pendientes.
+- `control`: revisa anexos y puede pasarlos a Control.
+- `consulta`: solo consulta operativa.
+- `auditoria`: acceso a auditoria/trazabilidad.
 
 Sin sesion iniciada, la app seguira funcionando localmente, pero Supabase bloqueara las escrituras por RLS.
 

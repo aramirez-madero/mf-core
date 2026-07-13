@@ -1,5 +1,18 @@
 create extension if not exists "pgcrypto";
 
+create table if not exists public.perfiles_usuario (
+  id uuid primary key default gen_random_uuid(),
+  id_local text not null unique,
+  usuario_id uuid unique references auth.users(id) on delete cascade,
+  correo text not null unique,
+  nombre text,
+  rol text not null default 'consulta' check (rol in ('administrador', 'operaciones', 'control', 'consulta', 'auditoria')),
+  activo boolean not null default true,
+  datos_completos jsonb not null default '{}'::jsonb,
+  creado_en timestamptz not null default now(),
+  actualizado_en timestamptz not null default now()
+);
+
 create table if not exists public.anexos_generados (
   id uuid primary key default gen_random_uuid(),
   id_local text not null unique,
@@ -191,6 +204,12 @@ on public.trazabilidad (id_local);
 create index if not exists trazabilidad_creado_en_idx
 on public.trazabilidad (creado_en desc);
 
+create index if not exists perfiles_usuario_correo_idx
+on public.perfiles_usuario (correo);
+
+create index if not exists perfiles_usuario_rol_idx
+on public.perfiles_usuario (rol);
+
 create or replace function public.actualizar_fecha_modificacion()
 returns trigger
 language plpgsql
@@ -231,6 +250,56 @@ create trigger actualizar_plantillas_anexos_fecha
 before update on public.plantillas_anexos
 for each row execute function public.actualizar_fecha_modificacion();
 
+drop trigger if exists actualizar_perfiles_usuario_fecha on public.perfiles_usuario;
+create trigger actualizar_perfiles_usuario_fecha
+before update on public.perfiles_usuario
+for each row execute function public.actualizar_fecha_modificacion();
+
+create or replace function public.es_administrador()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.perfiles_usuario
+    where usuario_id = auth.uid()
+      and rol = 'administrador'
+      and activo = true
+  );
+$$;
+
+create or replace function public.perfil_activo()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.perfiles_usuario
+    where usuario_id = auth.uid()
+      and activo = true
+  );
+$$;
+
+create or replace function public.tiene_rol(roles text[])
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.perfiles_usuario
+    where usuario_id = auth.uid()
+      and activo = true
+      and rol = any (roles)
+  );
+$$;
+
+alter table public.perfiles_usuario enable row level security;
 alter table public.anexos_generados enable row level security;
 alter table public.registros_control enable row level security;
 alter table public.adquirientes enable row level security;
@@ -241,75 +310,143 @@ alter table public.cargas_importadas enable row level security;
 alter table public.auditoria enable row level security;
 alter table public.trazabilidad enable row level security;
 
+drop policy if exists "Usuarios pueden consultar su perfil" on public.perfiles_usuario;
+create policy "Usuarios pueden consultar su perfil"
+on public.perfiles_usuario for select
+to authenticated
+using (usuario_id = auth.uid() or public.es_administrador());
+-- Tambien permite que un usuario vea el perfil precreado por correo antes de enlazar usuario_id.
+drop policy if exists "Usuarios pueden consultar perfil por correo" on public.perfiles_usuario;
+create policy "Usuarios pueden consultar perfil por correo"
+on public.perfiles_usuario for select
+to authenticated
+using (lower(correo) = lower(coalesce(auth.jwt() ->> 'email', '')));
+
+drop policy if exists "Usuarios pueden crear su perfil inicial" on public.perfiles_usuario;
+create policy "Usuarios pueden crear su perfil inicial"
+on public.perfiles_usuario for insert
+to authenticated
+with check (usuario_id = auth.uid() or public.es_administrador());
+
+drop policy if exists "Administradores pueden gestionar perfiles" on public.perfiles_usuario;
+create policy "Administradores pueden gestionar perfiles"
+on public.perfiles_usuario for update
+to authenticated
+using (public.es_administrador() or usuario_id = auth.uid())
+with check (public.es_administrador() or usuario_id = auth.uid() or lower(correo) = lower(coalesce(auth.jwt() ->> 'email', '')));
+
+drop policy if exists "Usuarios pueden enlazar su perfil por correo" on public.perfiles_usuario;
+create policy "Usuarios pueden enlazar su perfil por correo"
+on public.perfiles_usuario for update
+to authenticated
+using (lower(correo) = lower(coalesce(auth.jwt() ->> 'email', '')))
+with check (usuario_id = auth.uid() and lower(correo) = lower(coalesce(auth.jwt() ->> 'email', '')));
+
 drop policy if exists "Usuarios autenticados pueden gestionar anexos generados" on public.anexos_generados;
 create policy "Usuarios autenticados pueden gestionar anexos generados"
 on public.anexos_generados for all
 to authenticated
-using (true)
-with check (true);
+using (public.tiene_rol(array['administrador', 'operaciones', 'control']))
+with check (public.tiene_rol(array['administrador', 'operaciones', 'control']));
 
 drop policy if exists "Usuarios autenticados pueden gestionar registros de control" on public.registros_control;
 create policy "Usuarios autenticados pueden gestionar registros de control"
 on public.registros_control for all
 to authenticated
-using (true)
-with check (true);
+using (public.tiene_rol(array['administrador', 'control']))
+with check (public.tiene_rol(array['administrador', 'control']));
 
 drop policy if exists "Usuarios autenticados pueden gestionar adquirientes" on public.adquirientes;
 create policy "Usuarios autenticados pueden gestionar adquirientes"
 on public.adquirientes for all
 to authenticated
-using (true)
-with check (true);
+using (public.tiene_rol(array['administrador', 'operaciones']))
+with check (public.tiene_rol(array['administrador', 'operaciones']));
 
 drop policy if exists "Usuarios autenticados pueden gestionar referidores" on public.referidores;
 create policy "Usuarios autenticados pueden gestionar referidores"
 on public.referidores for all
 to authenticated
-using (true)
-with check (true);
+using (public.tiene_rol(array['administrador', 'operaciones']))
+with check (public.tiene_rol(array['administrador', 'operaciones']));
 
 drop policy if exists "Usuarios autenticados pueden gestionar proveedores participantes" on public.proveedores_participantes;
 create policy "Usuarios autenticados pueden gestionar proveedores participantes"
 on public.proveedores_participantes for all
 to authenticated
-using (true)
-with check (true);
+using (public.tiene_rol(array['administrador', 'operaciones']))
+with check (public.tiene_rol(array['administrador', 'operaciones']));
 
 drop policy if exists "Usuarios autenticados pueden gestionar plantillas de anexos" on public.plantillas_anexos;
 create policy "Usuarios autenticados pueden gestionar plantillas de anexos"
 on public.plantillas_anexos for all
 to authenticated
-using (true)
-with check (true);
+using (public.tiene_rol(array['administrador', 'operaciones']))
+with check (public.tiene_rol(array['administrador', 'operaciones']));
 
 drop policy if exists "Usuarios autenticados pueden gestionar cargas importadas" on public.cargas_importadas;
 create policy "Usuarios autenticados pueden gestionar cargas importadas"
 on public.cargas_importadas for all
 to authenticated
-using (true)
-with check (true);
+using (public.tiene_rol(array['administrador', 'operaciones']))
+with check (public.tiene_rol(array['administrador', 'operaciones']));
+
+drop policy if exists "Usuarios activos pueden consultar anexos generados" on public.anexos_generados;
+create policy "Usuarios activos pueden consultar anexos generados"
+on public.anexos_generados for select
+to authenticated
+using (public.perfil_activo());
+
+drop policy if exists "Usuarios activos pueden consultar registros de control" on public.registros_control;
+create policy "Usuarios activos pueden consultar registros de control"
+on public.registros_control for select
+to authenticated
+using (public.perfil_activo());
+
+drop policy if exists "Usuarios activos pueden consultar adquirientes" on public.adquirientes;
+create policy "Usuarios activos pueden consultar adquirientes"
+on public.adquirientes for select
+to authenticated
+using (public.perfil_activo());
+
+drop policy if exists "Usuarios activos pueden consultar referidores" on public.referidores;
+create policy "Usuarios activos pueden consultar referidores"
+on public.referidores for select
+to authenticated
+using (public.perfil_activo());
+
+drop policy if exists "Usuarios activos pueden consultar proveedores participantes" on public.proveedores_participantes;
+create policy "Usuarios activos pueden consultar proveedores participantes"
+on public.proveedores_participantes for select
+to authenticated
+using (public.perfil_activo());
+
+drop policy if exists "Usuarios activos pueden consultar plantillas de anexos" on public.plantillas_anexos;
+create policy "Usuarios activos pueden consultar plantillas de anexos"
+on public.plantillas_anexos for select
+to authenticated
+using (public.perfil_activo());
 
 drop policy if exists "Usuarios autenticados pueden consultar auditoria" on public.auditoria;
 create policy "Usuarios autenticados pueden consultar auditoria"
 on public.auditoria for select
 to authenticated
-using (true);
+using (public.tiene_rol(array['administrador', 'auditoria']));
 
 drop policy if exists "Usuarios autenticados pueden registrar auditoria" on public.auditoria;
 create policy "Usuarios autenticados pueden registrar auditoria"
 on public.auditoria for insert
 to authenticated
-with check (true);
+with check (public.perfil_activo());
 
 drop policy if exists "Usuarios autenticados pueden consultar trazabilidad" on public.trazabilidad;
 create policy "Usuarios autenticados pueden consultar trazabilidad"
 on public.trazabilidad for select
 to authenticated
-using (true);
+using (public.tiene_rol(array['administrador', 'auditoria']));
 
 drop policy if exists "Usuarios autenticados pueden registrar trazabilidad" on public.trazabilidad;
 create policy "Usuarios autenticados pueden registrar trazabilidad"
 on public.trazabilidad for insert
 to authenticated
-with check (true);
+with check (public.perfil_activo());
