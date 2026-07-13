@@ -446,7 +446,7 @@ drop policy if exists "Usuarios autenticados pueden consultar auditoria" on publ
 create policy "Usuarios autenticados pueden consultar auditoria"
 on public.auditoria for select
 to authenticated
-using (public.tiene_rol(array['administrador', 'auditoria']));
+using (public.tiene_rol(array['administrador', 'operaciones', 'auditoria']));
 
 drop policy if exists "Usuarios autenticados pueden registrar auditoria" on public.auditoria;
 create policy "Usuarios autenticados pueden registrar auditoria"
@@ -458,7 +458,7 @@ drop policy if exists "Usuarios autenticados pueden consultar trazabilidad" on p
 create policy "Usuarios autenticados pueden consultar trazabilidad"
 on public.trazabilidad for select
 to authenticated
-using (public.tiene_rol(array['administrador', 'auditoria']));
+using (public.tiene_rol(array['administrador', 'operaciones', 'auditoria']));
 
 drop policy if exists "Usuarios autenticados pueden registrar trazabilidad" on public.trazabilidad;
 create policy "Usuarios autenticados pueden registrar trazabilidad"
