@@ -2127,7 +2127,7 @@ function renderGeneratedAnnexes() {
               </td>
               <td>${escapeHtml(row.moneda || '-')}</td>
               <td class="num">${money.format(Number(row.total_monto_descontado || row.monto_descontado || row.monto_desembolsar) || 0)}</td>
-              <td>${badge(row.estado_control || row.estado_validacion || row.estado)}</td>
+              <td>${annexControlBadge(row.estado_control || row.estado_validacion || row.estado)}</td>
               <td class="actions">
                 <button class="icon-action" title="Ver anexo" aria-label="Ver anexo" data-view-annex="${row.id}">${iconView()}</button>
                 <button class="icon-action" title="Descargar PDF" aria-label="Descargar PDF" data-download-annex="${row.id}">${iconDownload()}</button>
@@ -3154,6 +3154,13 @@ function badge(status) {
         ? 'warn'
         : 'info';
   return `<span class="badge ${tone}">${escapeHtml(status || 'Pendiente')}</span>`;
+}
+
+function annexControlBadge(status) {
+  const normalized = status || 'Pendiente de pasar a Control';
+  const label = normalized === 'En Control' ? 'En Control' : 'Pendiente';
+  const tone = normalized === 'En Control' ? 'ok' : 'info';
+  return `<span class="badge ${tone}" title="${escapeHtml(normalized)}">${escapeHtml(label)}</span>`;
 }
 
 function statusBadge(status) {

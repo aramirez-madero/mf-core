@@ -348,7 +348,7 @@ textarea { min-height: 86px; resize: vertical; }
   min-width: 900px;
 }
 .generated-annex-table {
-  min-width: 1160px;
+  min-width: 1220px;
   table-layout: fixed;
 }
 .control-table {
@@ -445,12 +445,12 @@ textarea { min-height: 86px; resize: vertical; }
 }
 .generated-annex-table th:nth-child(8),
 .generated-annex-table td:nth-child(8) {
-  width: 160px;
+  width: 188px;
   text-align: center;
 }
 .generated-annex-table th:nth-child(7),
 .generated-annex-table td:nth-child(7) {
-  width: 112px;
+  width: 126px;
   text-align: center;
 }
 .generated-annex-table td strong,
@@ -470,6 +470,15 @@ textarea { min-height: 86px; resize: vertical; }
 .generated-annex-table .actions {
   justify-content: center;
   flex-wrap: nowrap;
+  gap: 7px;
+}
+.generated-annex-table .badge {
+  max-width: 100%;
+  justify-content: center;
+}
+.generated-annex-table .small-button {
+  min-width: 64px;
+  padding-inline: 10px;
 }
 .num {
   text-align: right;
