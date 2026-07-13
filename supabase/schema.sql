@@ -368,8 +368,8 @@ drop policy if exists "Usuarios autenticados pueden gestionar registros de contr
 create policy "Usuarios autenticados pueden gestionar registros de control"
 on public.registros_control for all
 to authenticated
-using (public.tiene_rol(array['administrador', 'control']))
-with check (public.tiene_rol(array['administrador', 'control']));
+using (public.tiene_rol(array['administrador', 'operaciones', 'control']))
+with check (public.tiene_rol(array['administrador', 'operaciones', 'control']));
 
 drop policy if exists "Usuarios autenticados pueden gestionar adquirientes" on public.adquirientes;
 create policy "Usuarios autenticados pueden gestionar adquirientes"

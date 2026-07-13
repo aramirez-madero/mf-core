@@ -36,8 +36,8 @@ const ROLE_PERMISSIONS = {
     actions: ['generate_annexes', 'send_control', 'cancel_annexes', 'edit_masters', 'view_audit', 'manage_users'],
   },
   operaciones: {
-    modules: ['anexos', 'maestros'],
-    actions: ['generate_annexes', 'cancel_annexes'],
+    modules: ['anexos', 'maestros', 'control'],
+    actions: ['generate_annexes', 'send_control', 'cancel_annexes'],
   },
   control: {
     modules: ['anexos', 'control'],
