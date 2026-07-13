@@ -310,11 +310,6 @@ async function boot() {
   $('annex-params').addEventListener('input', cacheAnnexParamInput);
   $('annex-params').addEventListener('change', commitAnnexParamInput);
   $('annex-params').addEventListener('focusout', commitAnnexParamInput);
-  $('export-preview-format').addEventListener('change', (event) => {
-    if (!event.target.value) return;
-    exportPreview(event.target.value);
-    event.target.value = '';
-  });
   $('annex-generated-search').addEventListener('input', (event) => {
     state.annexGeneratedSearch = event.target.value;
     renderGeneratedAnnexes();
@@ -2272,18 +2267,6 @@ function annexCell(label, value) {
   return `<div class="info-cell"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(formatValue(value))}</span></div>`;
 }
 
-function exportPreview(type) {
-  if (!state.previewRows.length) return;
-  exportRows({
-    type,
-    fileBase: 'MF-Core-CAVALI',
-    sheetName: 'CAVALI',
-    headers: HISTORICO_COLUMNS.map(([, label]) => label),
-    rows: state.previewRows,
-    keys: HISTORICO_COLUMNS.map(([key]) => key),
-  });
-}
-
 function exportHistorico(rows, fileName = `MF-Core-HISTORICO-${new Date().toISOString().slice(0, 10)}.xlsx`) {
   const data = rows.map((row) => Object.fromEntries(HISTORICO_COLUMNS.map(([key, label]) => [label, row[key] ?? ''])));
   if (window.XLSX) {
@@ -2366,7 +2349,6 @@ function renderAll() {
 function renderMetrics() {
   const valid = state.previewRows.filter((row) => ['Validado', 'Listo para generar'].includes(row.estado_validacion)).length;
   $('generate-annexes').disabled = valid === 0;
-  $('export-preview-format').disabled = state.previewRows.length === 0;
   $('cancel-preview-import').disabled = state.previewRows.length === 0;
 }
 
