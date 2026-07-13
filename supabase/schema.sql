@@ -300,6 +300,21 @@ as $$
 $$;
 
 alter table public.perfiles_usuario enable row level security;
+alter table public.perfiles_usuario replica identity full;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'perfiles_usuario'
+  ) then
+    alter publication supabase_realtime add table public.perfiles_usuario;
+  end if;
+end $$;
+
 alter table public.anexos_generados enable row level security;
 alter table public.registros_control enable row level security;
 alter table public.adquirientes enable row level security;

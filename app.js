@@ -9,6 +9,7 @@ let authNotice = '';
 let currentProfile = null;
 let userProfiles = [];
 let sessionGuardTimer = null;
+let profileRealtimeChannel = null;
 
 const STORAGE = {
   master: 'mf_core_master_data_v2',
@@ -570,31 +571,71 @@ function startSessionGuard() {
   if (sessionGuardTimer || !currentSession) return;
   sessionGuardTimer = window.setInterval(() => {
     void enforceActiveProfile();
-  }, 60000);
+  }, 10000);
+  startProfileRealtimeGuard();
 }
 
 function stopSessionGuard() {
-  if (!sessionGuardTimer) return;
-  window.clearInterval(sessionGuardTimer);
-  sessionGuardTimer = null;
+  if (sessionGuardTimer) {
+    window.clearInterval(sessionGuardTimer);
+    sessionGuardTimer = null;
+  }
+  stopProfileRealtimeGuard();
+}
+
+function startProfileRealtimeGuard() {
+  if (!supabaseReady() || !currentSession || profileRealtimeChannel) return;
+  const userId = currentUserId();
+  const email = currentSession.user.email || '';
+  profileRealtimeChannel = supabase
+    .channel(`perfil-activo-${userId || email}`)
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'perfiles_usuario',
+    }, (payload) => {
+      const profile = fromProfileDb(payload.new || {});
+      const isCurrentUser = (userId && profile.usuario_id === userId)
+        || (email && normalizeHeader(profile.correo) === normalizeHeader(email));
+      if (!isCurrentUser) return;
+      currentProfile = profile;
+      if (profile.activo === false) {
+        void forceInactiveSignOut();
+        return;
+      }
+      updateNavigationAccess();
+      renderAll();
+    })
+    .subscribe();
+}
+
+function stopProfileRealtimeGuard() {
+  if (!profileRealtimeChannel || !supabaseReady()) return;
+  supabase.removeChannel(profileRealtimeChannel);
+  profileRealtimeChannel = null;
 }
 
 async function enforceActiveProfile() {
   if (!supabaseReady() || !currentSession || passwordRecoveryMode) return;
   await loadUserProfiles();
   if (currentProfile?.activo === false) {
-    stopSessionGuard();
-    await supabase.auth.signOut();
-    currentSession = null;
-    currentProfile = null;
-    userProfiles = [];
-    passwordRecoveryMode = false;
-    authNotice = 'Usuario inactivo.';
-    clearSensitiveLocalState();
-    updateAuthUi();
-    replacePublicRoute();
-    renderAll();
+    await forceInactiveSignOut();
   }
+}
+
+async function forceInactiveSignOut() {
+  if (!currentSession) return;
+  stopSessionGuard();
+  await supabase.auth.signOut();
+  currentSession = null;
+  currentProfile = null;
+  userProfiles = [];
+  passwordRecoveryMode = false;
+  authNotice = 'Usuario inactivo.';
+  clearSensitiveLocalState();
+  updateAuthUi();
+  replacePublicRoute();
+  renderAll();
 }
 
 async function updatePassword() {
