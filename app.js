@@ -344,6 +344,7 @@ async function boot() {
   $('auth-logout').addEventListener('click', signOut);
   $('change-password-open').addEventListener('click', openPasswordModal);
   $('profile-password-save').addEventListener('click', saveProfilePassword);
+  $('annex-edit-save').addEventListener('click', saveAnnexEdition);
   $('add-user-profile').addEventListener('click', addUserProfile);
   $('add-master').addEventListener('click', () => openRecordModal('master', state.activeMaster, null));
   $('export-control-format').addEventListener('change', (event) => {
@@ -2451,6 +2452,7 @@ function renderGeneratedAnnexes() {
                   <summary aria-label="Opciones del anexo">&vellip;</summary>
                   <div class="row-menu-panel">
                     <button type="button" data-view-annex="${row.id}">Ver anexo</button>
+                    ${canDo('generate_annexes') && !isAnnexCancelled(row) ? `<button type="button" data-edit-annex="${row.id}">Editar anexo</button>` : ''}
                     <button type="button" data-download-annex="${row.id}">Descargar PDF</button>
                     ${isAnnexPendingControl(row) && canSendControl ? `<button type="button" data-send-control="${row.id}">Pasar a Control</button>` : ''}
                     ${isAnnexPendingControl(row) && canCancelAnnex ? `<button class="danger-text" type="button" data-cancel-annex="${row.id}">Cancelar anexo</button>` : ''}
@@ -2477,6 +2479,7 @@ function renderGeneratedAnnexes() {
   container.querySelector('#bulk-send-control')?.addEventListener('click', () => sendSelectedAnnexesToControl());
   container.querySelector('#bulk-cancel-annexes')?.addEventListener('click', () => cancelSelectedAnnexes());
   container.querySelectorAll('[data-view-annex]').forEach((button) => button.addEventListener('click', () => openGeneratedAnnex(button.dataset.viewAnnex)));
+  container.querySelectorAll('[data-edit-annex]').forEach((button) => button.addEventListener('click', () => openAnnexEditModal(button.dataset.editAnnex)));
   container.querySelectorAll('[data-download-annex]').forEach((button) => button.addEventListener('click', () => openGeneratedAnnex(button.dataset.downloadAnnex, true)));
   container.querySelectorAll('[data-send-control]').forEach((button) => button.addEventListener('click', () => confirmAnnexToControl(button.dataset.sendControl)));
   container.querySelectorAll('[data-cancel-annex]').forEach((button) => button.addEventListener('click', () => cancelAnnex(button.dataset.cancelAnnex)));
@@ -2531,6 +2534,148 @@ function sortGeneratedAnnexes(rows) {
     return String(b.fecha_generacion || '').localeCompare(String(a.fecha_generacion || ''));
   });
   return sorted;
+}
+
+function openAnnexEditModal(id) {
+  if (!canDo('generate_annexes')) return;
+  const annex = state.annexRows.find((row) => row.id === id);
+  if (!annex || isAnnexCancelled(annex)) return;
+  const lines = annex.lineas?.length ? annex.lineas : [annex];
+  const dialog = $('annex-edit-modal');
+  const container = $('annex-edit-lines');
+  dialog.dataset.annexId = id;
+  $('annex-edit-warning').textContent = '';
+  $('annex-edit-title').textContent = `Editar anexo ${annexCode(annex)}`;
+  container.innerHTML = lines.map((line, index) => `
+    <div class="annex-edit-line" data-line-index="${index}">
+      <div>
+        <strong>${escapeHtml(formatValue(line.factura || `Factura ${index + 1}`))}</strong>
+        <span>${escapeHtml(formatValue(line.obligado || annex.obligado || ''))}</span>
+      </div>
+      <label>
+        <span>F. Desembolso</span>
+        <input type="date" data-annex-edit="fecha_desembolso" value="${escapeAttr(normalizeDate(line.fecha_desembolso || annex.fecha_desembolso))}" />
+      </label>
+      <label>
+        <span>F. Venc.</span>
+        <input type="date" data-annex-edit="fecha_vencimiento" value="${escapeAttr(normalizeDate(line.fecha_vencimiento || annex.fecha_vencimiento))}" />
+      </label>
+      <label>
+        <span>Monto Neto</span>
+        <input type="text" inputmode="decimal" data-annex-edit="monto_neto_pago" value="${escapeAttr(formatDecimalInput(line.monto_neto_pago))}" />
+      </label>
+    </div>
+  `).join('');
+  dialog.showModal();
+}
+
+function saveAnnexEdition(event) {
+  event.preventDefault();
+  const dialog = $('annex-edit-modal');
+  const id = dialog.dataset.annexId;
+  const annex = state.annexRows.find((row) => row.id === id);
+  if (!annex) return;
+  const previous = structuredClone(annex);
+  const originalLines = annex.lineas?.length ? annex.lineas : [annex];
+  const editedLines = Array.from(dialog.querySelectorAll('.annex-edit-line')).map((lineEl, index) => {
+    const line = { ...originalLines[index] };
+    lineEl.querySelectorAll('[data-annex-edit]').forEach((input) => {
+      if (input.dataset.annexEdit === 'monto_neto_pago') line.monto_neto_pago = parseAmountInput(input.value);
+      else line[input.dataset.annexEdit] = input.value;
+    });
+    return recalculateAnnexLine(line);
+  });
+  if (editedLines.some((line) => !line.fecha_desembolso || !line.fecha_vencimiento || !Number(line.monto_neto_pago))) {
+    $('annex-edit-warning').textContent = 'Completa F. Desembolso, F. Venc. y Monto Neto para cada factura.';
+    return;
+  }
+  if (editedLines.some((line) => Number(line.plazo_operacion) < 0)) {
+    $('annex-edit-warning').textContent = 'La F. Venc. no puede ser anterior a la F. Desembolso.';
+    return;
+  }
+  const updated = rebuildEditedAnnex(annex, editedLines);
+  state.annexRows = state.annexRows.map((row) => row.id === id ? updated : row);
+  const controlExists = state.controlRows.some((row) => row.id === id);
+  if (controlExists) {
+    state.controlRows = state.controlRows.map((row) => row.id === id ? {
+      ...updated,
+      estado_control: row.estado_control,
+      estado_validacion: row.estado_validacion,
+      estado: row.estado,
+      fecha_pase_control: row.fecha_pase_control,
+      usuario_pase_control: row.usuario_pase_control,
+    } : row);
+  }
+  save(STORAGE.annexes, state.annexRows);
+  if (controlExists) save(STORAGE.control, state.controlRows);
+  appendAudit(
+    'anexos',
+    id,
+    'Edicion de anexo generado',
+    summarizeAnnexEditableFields(previous),
+    summarizeAnnexEditableFields(updated),
+    `Se editaron F. Desembolso, F. Venc. o Monto Neto del anexo ${updated.operacion || id}. Dias y montos derivados recalculados automaticamente.`,
+    updated.operacion || id,
+  );
+  dialog.close();
+  renderAll();
+}
+
+function recalculateAnnexLine(line) {
+  const neto = Number(line.monto_neto_pago) || 0;
+  const fechaDesembolso = line.fecha_desembolso || limaDateInput();
+  const fechaVencimiento = line.fecha_vencimiento || line.fecha_pago || '';
+  const dias = daysBetween(fechaDesembolso, fechaVencimiento);
+  const cobertura = asNumber(line.margen_cobertura);
+  const tnm = asNumber(line.tasa);
+  const comision = asNumber(line.porcentaje_comision_desembolso);
+  const montoFinanciado = neto * (1 - cobertura);
+  const interes = montoFinanciado * (Math.pow(1 + (tnm / 30), (Number(dias) || 0) + 1) - 1);
+  const igvInteres = interes * 0.18;
+  const montoDescontado = montoFinanciado - interes;
+  return {
+    ...line,
+    fecha_desembolso: fechaDesembolso,
+    fecha_vencimiento: fechaVencimiento,
+    fecha_pago: fechaVencimiento,
+    monto_neto_pago: round2(neto),
+    monto_financiado_saldo_capital: round2(montoFinanciado),
+    interes_compensatorio: round2(interes),
+    igv: round2(igvInteres),
+    monto_descontado: round2(montoDescontado),
+    comisiones: round2(montoFinanciado * comision),
+    plazo_operacion: dias,
+    capital: round2(montoFinanciado),
+  };
+}
+
+function rebuildEditedAnnex(annex, editedLines) {
+  const recalculated = calculateAnnexGroup({ ...annex, ...editedLines[0], lineas: editedLines });
+  const editedAt = new Date().toISOString();
+  const updated = {
+    ...annex,
+    ...recalculated,
+    lineas: editedLines,
+    fecha_desembolso: editedLines[0]?.fecha_desembolso || annex.fecha_desembolso,
+    fecha_vencimiento: editedLines[0]?.fecha_vencimiento || annex.fecha_vencimiento,
+    fecha_pago: editedLines[0]?.fecha_vencimiento || annex.fecha_pago,
+    fecha_edicion_anexo: editedAt,
+    usuario_edicion_anexo: currentUserName(),
+  };
+  return {
+    ...updated,
+    anexo_html: buildAnnexHtmlV2(updated),
+    fecha_snapshot: editedAt,
+  };
+}
+
+function summarizeAnnexEditableFields(annex) {
+  const lines = annex.lineas?.length ? annex.lineas : [annex];
+  return lines.map((line) => `${line.factura || 'Factura'}: desembolso ${normalizeDate(line.fecha_desembolso) || '-'}, venc. ${normalizeDate(line.fecha_vencimiento) || '-'}, neto ${auditMoney(line.monto_neto_pago, annex.moneda || line.moneda)}`).join(' | ');
+}
+
+function auditMoney(value, currency = 'PEN') {
+  return new Intl.NumberFormat('es-PE', { style: 'currency', currency: currency === 'USD' ? 'USD' : 'PEN' }).format(Number(value) || 0);
 }
 
 function confirmAnnexToControl(id) {

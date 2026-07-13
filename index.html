@@ -314,6 +314,25 @@
       </form>
     </dialog>
 
+    <dialog id="annex-edit-modal">
+      <form method="dialog" class="modal-card">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Anexo</p>
+            <h3 id="annex-edit-title">Editar anexo</h3>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Cerrar">x</button>
+        </div>
+        <div class="summary compact-summary">Solo puedes editar F. Desembolso, F. Venc. y Monto Neto. Los dias se recalculan automaticamente.</div>
+        <div class="form-warning" id="annex-edit-warning"></div>
+        <div id="annex-edit-lines" class="annex-edit-lines"></div>
+        <menu class="modal-actions">
+          <button class="secondary" value="cancel">Cancelar</button>
+          <button class="primary" id="annex-edit-save" value="default">Guardar cambios</button>
+        </menu>
+      </form>
+    </dialog>
+
     <dialog id="password-modal">
       <form method="dialog" class="modal-card">
         <div class="section-title">
