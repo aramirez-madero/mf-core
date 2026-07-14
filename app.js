@@ -171,7 +171,7 @@ const ALIASES = {
   moneda: ['moneda'],
   fecha_emision: ['fecha de emision', 'fecha emision'],
   fecha_vencimiento: ['fecha de vencimiento', 'fecha vencimiento'],
-  fecha_pago: ['fecha de pago (xml - credito)', 'fecha de pago xml credito', 'fecha pago xml credito', 'fecha de pago', 'fecha pago'],
+  fecha_pago: ['fecha de pago', 'fecha pago', 'fecha de pago (xml - credito)', 'fecha de pago xml credito', 'fecha pago xml credito'],
   respuesta_adquirente: ['respuesta de adquirente', 'respuesta adquirente'],
   estado_cavali: ['estado'],
   observaciones_cavali: ['observaciones', 'observacion'],
