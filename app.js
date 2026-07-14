@@ -2374,13 +2374,11 @@ function renderPreview() {
       <td>${badge(row.estado_validacion)}</td>
       <td>${escapeHtml(row.observaciones || '-')}</td>
       <td class="actions">
-        <button class="icon-action" title="Editar" aria-label="Editar" data-edit-preview="${row.id}">${iconEdit()}</button>
         <button class="icon-action danger-icon" title="Eliminar" aria-label="Eliminar" data-delete-preview="${row.id}">${iconDelete()}</button>
       </td>
     </tr>
   `).join('') : '<tr><td class="empty" colspan="13">Carga un archivo CAVALI para ver la validacion previa.</td></tr>';
 
-  tbody.querySelectorAll('[data-edit-preview]').forEach((button) => button.addEventListener('click', () => openRecordModal('preview', null, button.dataset.editPreview)));
   tbody.querySelectorAll('[data-delete-preview]').forEach((button) => button.addEventListener('click', () => deleteRecord('preview', null, button.dataset.deletePreview)));
 }
 
