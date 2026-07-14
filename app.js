@@ -1890,6 +1890,10 @@ function round2(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
 
+function numericValue(value) {
+  return Number(String(value ?? '').replace(/,/g, '')) || 0;
+}
+
 function generateAnnexes() {
   if (!canDo('generate_annexes')) return;
   const validRows = state.previewRows.filter((row) => ['Validado', 'Listo para generar'].includes(row.estado_validacion));
@@ -2626,9 +2630,9 @@ function recalculateAnnexLine(line) {
   const fechaDesembolso = line.fecha_desembolso || limaDateInput();
   const fechaVencimiento = line.fecha_vencimiento || line.fecha_pago || '';
   const dias = daysBetween(fechaDesembolso, fechaVencimiento);
-  const cobertura = asNumber(line.margen_cobertura);
-  const tnm = asNumber(line.tasa);
-  const comision = asNumber(line.porcentaje_comision_desembolso);
+  const cobertura = numericValue(line.margen_cobertura);
+  const tnm = numericValue(line.tasa);
+  const comision = numericValue(line.porcentaje_comision_desembolso);
   const montoFinanciado = neto * (1 - cobertura);
   const interes = montoFinanciado * (Math.pow(1 + (tnm / 30), (Number(dias) || 0) + 1) - 1);
   const igvInteres = interes * 0.18;
