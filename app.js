@@ -3545,9 +3545,9 @@ function clean(value) {
 
 function normalizeMoney(value) {
   if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'number') return value;
+  if (typeof value === 'number') return round2(value);
   const parsed = Number(String(value).replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : null;
+  return Number.isFinite(parsed) ? round2(parsed) : null;
 }
 
 function normalizeCurrency(value) {
