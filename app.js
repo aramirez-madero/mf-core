@@ -308,7 +308,6 @@ async function boot() {
   $('generate-annexes').addEventListener('click', generateAnnexes);
   $('cancel-preview-import').addEventListener('click', cancelPreviewImport);
   $('annex-params').addEventListener('input', cacheAnnexParamInput);
-  $('annex-params').addEventListener('change', commitAnnexParamInput);
   $('annex-params').addEventListener('focusout', commitAnnexParamInput);
   $('annex-generated-search').addEventListener('input', (event) => {
     state.annexGeneratedSearch = event.target.value;
@@ -1579,10 +1578,6 @@ function validate(row, duplicateCount) {
   if (!row.moneda) obs.push('Falta moneda.');
   if (!row.fecha_vencimiento) obs.push('Falta fecha de vencimiento.');
   const params = getAnnexParams(annexGroupKey(row));
-  if (params.tnm === '') obs.push('Falta ingresar TNM.');
-  if (params.comisionDesembolso === '') obs.push('Falta ingresar comision de desembolso.');
-  if (params.margenCobertura === '') obs.push('Falta ingresar margen de cobertura.');
-  if (groupRequiresAdminExpense(row) && params.gastosAdministrativos === '') obs.push('Falta ingresar gastos administrativos.');
   if (!row.participante_origen_codigo) obs.push('Falta Participante Origen.');
   if (row.participante_origen_codigo !== '841' && !row.participante_origen_nombre) {
     obs.push('Participante Origen no encontrado en maestro. Debe registrar este participante antes de generar el anexo.');
@@ -1611,7 +1606,6 @@ function renderAnnexParams() {
         const key = annexGroupKey(group);
         const params = getAnnexParams(key);
         const hasReferidor = groupRequiresAdminExpense(group);
-        const bankExpense = params.gastosBancarios === '' ? fixed2(automaticBankExpense(group.moneda)) : params.gastosBancarios;
         const tnmValue = params.tnm === '' ? '' : formatDecimalInput(params.tnm);
         const commissionValue = params.comisionDesembolso === '' ? '' : formatDecimalInput(params.comisionDesembolso);
         const coverageValue = params.margenCobertura === '' ? '' : formatDecimalInput(params.margenCobertura);
@@ -1623,19 +1617,19 @@ function renderAnnexParams() {
               <span>${escapeHtml(group.ruc_cliente || '-')} - ${escapeHtml(group.ruc_obligado || '-')} | ${group.lineas.length} factura(s)</span>
             </div>
             <label>TNM %
-              <input data-annex-param="${escapeAttr(key)}" data-field="tnm" type="text" inputmode="decimal" value="${escapeAttr(tnmValue)}" placeholder="1.50" />
+              <input data-annex-param="${escapeAttr(key)}" data-field="tnm" type="text" inputmode="decimal" value="${escapeAttr(tnmValue)}" />
             </label>
             <label>Comision %
-              <input data-annex-param="${escapeAttr(key)}" data-field="comisionDesembolso" type="text" inputmode="decimal" value="${escapeAttr(commissionValue)}" placeholder="0.50" />
+              <input data-annex-param="${escapeAttr(key)}" data-field="comisionDesembolso" type="text" inputmode="decimal" value="${escapeAttr(commissionValue)}" />
             </label>
             <label>Cobertura %
-              <input data-annex-param="${escapeAttr(key)}" data-field="margenCobertura" type="text" inputmode="decimal" value="${escapeAttr(coverageValue)}" placeholder="10.00" />
+              <input data-annex-param="${escapeAttr(key)}" data-field="margenCobertura" type="text" inputmode="decimal" value="${escapeAttr(coverageValue)}" />
             </label>
             <label>Gastos adm.
-              ${hasReferidor ? `<input data-annex-param="${escapeAttr(key)}" data-field="gastosAdministrativos" type="text" inputmode="decimal" value="${escapeAttr(adminValue)}" placeholder="0.00" />` : '<span class="annex-static-value">No aplica</span>'}
+              ${hasReferidor ? `<input data-annex-param="${escapeAttr(key)}" data-field="gastosAdministrativos" type="text" inputmode="decimal" value="${escapeAttr(adminValue)}" />` : '<span class="annex-static-value">No aplica</span>'}
             </label>
             <label>Gastos banc.
-              <input data-annex-param="${escapeAttr(key)}" data-field="gastosBancarios" type="text" inputmode="decimal" value="${escapeAttr(formatDecimalInput(bankExpense))}" />
+              <input data-annex-param="${escapeAttr(key)}" data-field="gastosBancarios" type="text" inputmode="decimal" value="${escapeAttr(params.gastosBancarios === '' ? '' : formatDecimalInput(params.gastosBancarios))}" />
             </label>
           </div>`;
       }).join('')}
@@ -1662,7 +1656,8 @@ function commitAnnexParamInput(event) {
   save(STORAGE.annexParams, state.annexParams);
   state.previewRows = refreshPreviewRows(state.previewRows);
   save(STORAGE.preview, state.previewRows);
-  renderAll();
+  renderMetrics();
+  renderPreview();
 }
 
 function getAnnexParams(key) {
@@ -1751,9 +1746,7 @@ function calculateAnnexRow(row) {
   const coberturaTexto = formatPercentInputDisplay(params.margenCobertura);
   const comisionTexto = formatPercentInputDisplay(params.comisionDesembolso);
   const gastosAdmin = groupRequiresAdminExpense(row) ? parseAmountInput(params.gastosAdministrativos) : 0;
-  const gastoBanco = params.gastosBancarios === '' || params.gastosBancarios == null
-    ? automaticBankExpense(moneda)
-    : parseAmountInput(params.gastosBancarios);
+  const gastoBanco = parseAmountInput(params.gastosBancarios);
   const fechaDesembolso = row.fecha_desembolso || limaDateInput();
   const fechaVencimiento = row.fecha_vencimiento || row.fecha_pago || '';
   const dias = daysBetween(fechaDesembolso, fechaVencimiento);
@@ -1870,10 +1863,6 @@ function percentDisplayValue(value) {
   const number = Number(value) || 0;
   if (!number) return '';
   return `${(number * 100).toFixed(2)}%`;
-}
-
-function automaticBankExpense(moneda) {
-  return moneda === 'USD' ? 30 : 100;
 }
 
 function daysBetween(startDate, endDate) {
