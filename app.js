@@ -2418,7 +2418,8 @@ function renderGeneratedAnnexes() {
           <tr>
             <th></th>
             <th>Codigo anexo</th>
-            <th>Fecha gen.</th>
+            <th>Fecha de creacion</th>
+            <th>Fecha de modificacion</th>
             <th>Cliente</th>
             <th>Adquiriente</th>
             <th>Moneda</th>
@@ -2437,7 +2438,8 @@ function renderGeneratedAnnexes() {
                 <strong>${escapeHtml(annexCode(row))}</strong>
                 <small>Op. ${escapeHtml(row.operacion || '-')}</small>
               </td>
-              <td>${escapeHtml(formatDateOnly(row.fecha_generacion))}</td>
+              <td>${escapeHtml(formatLimaDateTime(row.creado_en || row.fecha_generacion))}</td>
+              <td>${escapeHtml(formatLimaDateTime(row.actualizado_en || row.fecha_edicion_anexo || row.creado_en || row.fecha_generacion))}</td>
               <td>
                 <strong>${escapeHtml(row.cliente || '-')}</strong>
                 <small>${escapeHtml(row.ruc_cliente || '')}</small>
@@ -2461,7 +2463,7 @@ function renderGeneratedAnnexes() {
                   </div>
                 </details>
               </td>
-            </tr>`).join('') : '<tr><td class="empty" colspan="9">No hay anexos generados.</td></tr>'}
+            </tr>`).join('') : '<tr><td class="empty" colspan="10">No hay anexos generados.</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -2571,7 +2573,7 @@ function openAnnexEditModal(id) {
   dialog.showModal();
 }
 
-function saveAnnexEdition(event) {
+async function saveAnnexEdition(event) {
   event.preventDefault();
   const dialog = $('annex-edit-modal');
   const id = dialog.dataset.annexId;
@@ -2596,7 +2598,9 @@ function saveAnnexEdition(event) {
     return;
   }
   const updated = rebuildEditedAnnex(annex, editedLines);
-  state.annexRows = state.annexRows.map((row) => row.id === id ? updated : row);
+  const editedIndex = state.annexRows.findIndex((row) => row.id === id);
+  state.annexRows = state.annexRows.filter((row) => row.id !== id);
+  state.annexRows.splice(Math.max(0, editedIndex), 0, updated);
   const controlExists = state.controlRows.some((row) => row.id === id);
   if (controlExists) {
     state.controlRows = state.controlRows.map((row) => row.id === id ? {
@@ -2608,7 +2612,8 @@ function saveAnnexEdition(event) {
       usuario_pase_control: row.usuario_pase_control,
     } : row);
   }
-  save(STORAGE.annexes, state.annexRows);
+  localStorage.setItem(STORAGE.annexes, JSON.stringify(state.annexRows));
+  await persistAnnexEditionToSupabase(updated);
   if (controlExists) save(STORAGE.control, state.controlRows);
   appendAudit(
     'anexos',
@@ -2662,6 +2667,7 @@ function rebuildEditedAnnex(annex, editedLines) {
     fecha_vencimiento: editedLines[0]?.fecha_vencimiento || annex.fecha_vencimiento,
     fecha_pago: editedLines[0]?.fecha_vencimiento || annex.fecha_pago,
     fecha_edicion_anexo: editedAt,
+    actualizado_en: editedAt,
     usuario_edicion_anexo: currentUserName(),
   };
   return {
@@ -3770,6 +3776,14 @@ async function persistAnnexesToSupabase(rows) {
   await persistRows('anexos_generados', rows, mapAnnexToDb, 'anexos generados');
 }
 
+async function persistAnnexEditionToSupabase(row) {
+  if (!row?.id) return;
+  await safeSupabaseWrite('edicion de anexo generado', () => supabase
+    .from('anexos_generados')
+    .update(mapAnnexToDb(row))
+    .eq('id_local', row.id));
+}
+
 async function persistControlToSupabase(rows) {
   await persistRows('registros_control', rows, mapControlToDb, 'registros de control');
 }
@@ -3825,9 +3839,16 @@ async function persistImportedLoadToSupabase(load) {
 }
 
 function fromDatosCompletos(row) {
-  return row?.datos_completos && Object.keys(row.datos_completos).length
+  if (!row) return row;
+  const data = row.datos_completos && Object.keys(row.datos_completos).length
     ? row.datos_completos
     : row;
+  return {
+    ...data,
+    id: row.id_local || data.id || row.id,
+    creado_en: row.creado_en || data.creado_en || data.fecha_generacion || null,
+    actualizado_en: row.actualizado_en || data.actualizado_en || data.fecha_edicion_anexo || row.creado_en || null,
+  };
 }
 
 async function loadSupabaseState() {
