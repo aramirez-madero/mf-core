@@ -11,6 +11,7 @@ let currentProfile = null;
 let userProfiles = [];
 let sessionGuardTimer = null;
 let profileRealtimeChannel = null;
+let annexParamFocusState = null;
 
 const STORAGE = {
   master: 'mf_core_master_data_v2',
@@ -249,6 +250,7 @@ void boot();
 async function boot() {
   window.addEventListener('popstate', applyRouteFromLocation);
   window.addEventListener('focus', enforceActiveProfile);
+  window.addEventListener('focus', restoreAnnexParamFocus);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) void enforceActiveProfile();
   });
@@ -308,6 +310,7 @@ async function boot() {
   $('generate-annexes').addEventListener('click', generateAnnexes);
   $('cancel-preview-import').addEventListener('click', cancelPreviewImport);
   $('annex-params').addEventListener('input', cacheAnnexParamInput);
+  $('annex-params').addEventListener('focusin', rememberAnnexParamFocus);
   $('annex-params').addEventListener('focusout', commitAnnexParamInput);
   $('annex-generated-search').addEventListener('input', (event) => {
     state.annexGeneratedSearch = event.target.value;
@@ -1578,6 +1581,9 @@ function validate(row, duplicateCount) {
   if (!row.moneda) obs.push('Falta moneda.');
   if (!row.fecha_vencimiento) obs.push('Falta fecha de vencimiento.');
   const params = getAnnexParams(annexGroupKey(row));
+  if (!isValidRequiredDecimal(params.tnm)) obs.push('TNM debe tener al menos un digito.');
+  if (!isValidRequiredDecimal(params.comisionDesembolso)) obs.push('Comision debe tener al menos un digito.');
+  if (!isValidRequiredDecimal(params.margenCobertura)) obs.push('Cobertura debe tener al menos un digito.');
   if (!row.participante_origen_codigo) obs.push('Falta Participante Origen.');
   if (row.participante_origen_codigo !== '841' && !row.participante_origen_nombre) {
     obs.push('Participante Origen no encontrado en maestro. Debe registrar este participante antes de generar el anexo.');
@@ -1606,6 +1612,7 @@ function renderAnnexParams() {
         const key = annexGroupKey(group);
         const params = getAnnexParams(key);
         const hasReferidor = groupRequiresAdminExpense(group);
+        const bankExpense = params.gastosBancarios === '' ? fixed2(automaticBankExpense(group.moneda)) : params.gastosBancarios;
         const tnmValue = params.tnm === '' ? '' : formatDecimalInput(params.tnm);
         const commissionValue = params.comisionDesembolso === '' ? '' : formatDecimalInput(params.comisionDesembolso);
         const coverageValue = params.margenCobertura === '' ? '' : formatDecimalInput(params.margenCobertura);
@@ -1617,19 +1624,19 @@ function renderAnnexParams() {
               <span>${escapeHtml(group.ruc_cliente || '-')} - ${escapeHtml(group.ruc_obligado || '-')} | ${group.lineas.length} factura(s)</span>
             </div>
             <label>TNM %
-              <input data-annex-param="${escapeAttr(key)}" data-field="tnm" type="text" inputmode="decimal" value="${escapeAttr(tnmValue)}" />
+              <input data-annex-param="${escapeAttr(key)}" data-field="tnm" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="${escapeAttr(tnmValue)}" />
             </label>
             <label>Comision %
-              <input data-annex-param="${escapeAttr(key)}" data-field="comisionDesembolso" type="text" inputmode="decimal" value="${escapeAttr(commissionValue)}" />
+              <input data-annex-param="${escapeAttr(key)}" data-field="comisionDesembolso" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="${escapeAttr(commissionValue)}" />
             </label>
             <label>Cobertura %
-              <input data-annex-param="${escapeAttr(key)}" data-field="margenCobertura" type="text" inputmode="decimal" value="${escapeAttr(coverageValue)}" />
+              <input data-annex-param="${escapeAttr(key)}" data-field="margenCobertura" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="${escapeAttr(coverageValue)}" />
             </label>
             <label>Gastos adm.
               ${hasReferidor ? `<input data-annex-param="${escapeAttr(key)}" data-field="gastosAdministrativos" type="text" inputmode="decimal" value="${escapeAttr(adminValue)}" />` : '<span class="annex-static-value">No aplica</span>'}
             </label>
             <label>Gastos banc.
-              <input data-annex-param="${escapeAttr(key)}" data-field="gastosBancarios" type="text" inputmode="decimal" value="${escapeAttr(params.gastosBancarios === '' ? '' : formatDecimalInput(params.gastosBancarios))}" />
+              <input data-annex-param="${escapeAttr(key)}" data-field="gastosBancarios" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="${escapeAttr(formatDecimalInput(bankExpense))}" />
             </label>
           </div>`;
       }).join('')}
@@ -1639,18 +1646,53 @@ function renderAnnexParams() {
 function cacheAnnexParamInput(event) {
   const input = event.target.closest('[data-annex-param]');
   if (!input) return;
+  const originalValue = input.value;
+  const originalCursor = input.selectionStart ?? originalValue.length;
+  const sanitizedValue = sanitizeDecimalInput(originalValue);
+  if (sanitizedValue !== originalValue) {
+    const sanitizedCursor = sanitizeDecimalInput(originalValue.slice(0, originalCursor)).length;
+    input.value = sanitizedValue;
+    input.setSelectionRange(sanitizedCursor, sanitizedCursor);
+  }
   const key = input.dataset.annexParam;
   const field = input.dataset.field;
   state.annexParams[key] = { ...getAnnexParams(key), [field]: input.value };
+  rememberAnnexParamFocus(event);
   save(STORAGE.annexParams, state.annexParams);
+}
+
+function rememberAnnexParamFocus(event) {
+  const input = event.target.closest('[data-annex-param]');
+  if (!input) return;
+  annexParamFocusState = {
+    input,
+    start: input.selectionStart,
+    end: input.selectionEnd,
+  };
+}
+
+function restoreAnnexParamFocus() {
+  const saved = annexParamFocusState;
+  if (!saved?.input?.isConnected) return;
+  window.setTimeout(() => {
+    if (!saved.input.isConnected) return;
+    saved.input.focus({ preventScroll: true });
+    if (saved.start != null && saved.end != null) saved.input.setSelectionRange(saved.start, saved.end);
+  }, 0);
 }
 
 function commitAnnexParamInput(event) {
   const input = event.target.closest('[data-annex-param]');
   if (!input) return;
+  if (!event.relatedTarget) return;
+  annexParamFocusState = null;
   const key = input.dataset.annexParam;
   const field = input.dataset.field;
-  const formatted = formatDecimalInput(input.value);
+  let formatted = formatDecimalInput(input.value);
+  if (field === 'gastosBancarios' && !isValidRequiredDecimal(formatted)) {
+    const group = groupAnnexRows(state.previewRows).find((row) => annexGroupKey(row) === key);
+    formatted = fixed2(automaticBankExpense(group?.moneda));
+  }
   input.value = formatted;
   state.annexParams[key] = { ...getAnnexParams(key), [field]: formatted };
   save(STORAGE.annexParams, state.annexParams);
@@ -1746,7 +1788,9 @@ function calculateAnnexRow(row) {
   const coberturaTexto = formatPercentInputDisplay(params.margenCobertura);
   const comisionTexto = formatPercentInputDisplay(params.comisionDesembolso);
   const gastosAdmin = groupRequiresAdminExpense(row) ? parseAmountInput(params.gastosAdministrativos) : 0;
-  const gastoBanco = parseAmountInput(params.gastosBancarios);
+  const gastoBanco = params.gastosBancarios === '' || params.gastosBancarios == null
+    ? automaticBankExpense(moneda)
+    : parseAmountInput(params.gastosBancarios);
   const fechaDesembolso = row.fecha_desembolso || limaDateInput();
   const fechaVencimiento = row.fecha_vencimiento || row.fecha_pago || '';
   const dias = daysBetween(fechaDesembolso, fechaVencimiento);
@@ -1863,6 +1907,22 @@ function percentDisplayValue(value) {
   const number = Number(value) || 0;
   if (!number) return '';
   return `${(number * 100).toFixed(2)}%`;
+}
+
+function sanitizeDecimalInput(value) {
+  const normalized = String(value ?? '').replaceAll(',', '.').replace(/[^0-9.]/g, '');
+  const decimalPoint = normalized.indexOf('.');
+  if (decimalPoint < 0) return normalized;
+  return `${normalized.slice(0, decimalPoint + 1)}${normalized.slice(decimalPoint + 1).replaceAll('.', '')}`;
+}
+
+function isValidRequiredDecimal(value) {
+  const text = String(value ?? '').trim().replace(',', '.');
+  return /\d/.test(text) && Number.isFinite(Number(text));
+}
+
+function automaticBankExpense(moneda) {
+  return moneda === 'USD' ? 30 : 100;
 }
 
 function daysBetween(startDate, endDate) {
