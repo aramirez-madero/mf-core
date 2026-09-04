@@ -4008,6 +4008,17 @@ async function persistAnnexesToSupabase(rows) {
   await persistRows('anexos_generados', rows, mapAnnexToDb, 'anexos generados');
 }
 
+async function readSupabaseState(label, operation) {
+  try {
+    const { data, error } = await operation();
+    if (error) throw error;
+    return { succeeded: true, rows: data || [] };
+  } catch (error) {
+    console.warn(`Supabase no pudo leer ${label}:`, error.message || error);
+    return { succeeded: false, rows: [] };
+  }
+}
+
 async function persistAnnexEditionToSupabase(row) {
   if (!row?.id) return;
   await safeSupabaseWrite('edicion de anexo generado', () => supabase
@@ -4087,58 +4098,46 @@ async function loadSupabaseState() {
   if (!supabaseReady() || !currentSession) return;
 
   const [
-    adquirientes,
-    proveedoresParticipantes,
-    referidores,
-    plantillasAnexos,
-    anexosGenerados,
-    registrosControl,
-    auditoria,
+    adquirientesResult,
+    proveedoresResult,
+    referidoresResult,
+    plantillasResult,
+    anexosResult,
+    controlResult,
+    auditoriaResult,
   ] = await Promise.all([
-    safeSupabaseRead('adquirientes', () => supabase.from('adquirientes').select('*').order('creado_en', { ascending: false })),
-    safeSupabaseRead('proveedores participantes', () => supabase.from('proveedores_participantes').select('*').order('creado_en', { ascending: false })),
-    safeSupabaseRead('referidores', () => supabase.from('referidores').select('*').order('creado_en', { ascending: false })),
-    safeSupabaseRead('plantillas de anexos', () => supabase.from('plantillas_anexos').select('*').order('creado_en', { ascending: false })),
-    safeSupabaseRead('anexos generados', () => supabase.from('anexos_generados').select('*').order('creado_en', { ascending: false })),
-    safeSupabaseRead('registros de control', () => supabase.from('registros_control').select('*').order('creado_en', { ascending: false })),
-    safeSupabaseRead('auditoria', () => supabase.from('auditoria').select('*').order('fecha_hora', { ascending: false })),
+    readSupabaseState('adquirientes', () => supabase.from('adquirientes').select('*').order('creado_en', { ascending: false })),
+    readSupabaseState('proveedores participantes', () => supabase.from('proveedores_participantes').select('*').order('creado_en', { ascending: false })),
+    readSupabaseState('referidores', () => supabase.from('referidores').select('*').order('creado_en', { ascending: false })),
+    readSupabaseState('plantillas de anexos', () => supabase.from('plantillas_anexos').select('*').order('creado_en', { ascending: false })),
+    readSupabaseState('anexos generados', () => supabase.from('anexos_generados').select('*').order('creado_en', { ascending: false })),
+    readSupabaseState('registros de control', () => supabase.from('registros_control').select('*').order('creado_en', { ascending: false })),
+    readSupabaseState('auditoria', () => supabase.from('auditoria').select('*').order('fecha_hora', { ascending: false })),
   ]);
 
-  const hasRemoteMasters = adquirientes.length || proveedoresParticipantes.length || referidores.length || plantillasAnexos.length;
-  const hasRemoteOperations = anexosGenerados.length || registrosControl.length || auditoria.length;
-
-  if (hasRemoteMasters) {
+  if ([adquirientesResult, proveedoresResult, referidoresResult, plantillasResult].every((result) => result.succeeded)) {
     state.masterData = normalizeMasterData({
-      adquirentes: adquirientes.map(fromDatosCompletos),
-      proveedoresParticipantes: proveedoresParticipantes.map(fromDatosCompletos),
-      referidores: referidores.map(fromDatosCompletos),
-      plantillasAnexos: plantillasAnexos.map(fromDatosCompletos),
+      adquirentes: adquirientesResult.rows.map(fromDatosCompletos),
+      proveedoresParticipantes: proveedoresResult.rows.map(fromDatosCompletos),
+      referidores: referidoresResult.rows.map(fromDatosCompletos),
+      plantillasAnexos: plantillasResult.rows.map(fromDatosCompletos),
     });
     localStorage.setItem(STORAGE.master, JSON.stringify(state.masterData));
   }
 
-  if (anexosGenerados.length) {
-    state.annexRows = anexosGenerados.map(fromDatosCompletos);
+  if (anexosResult.succeeded) {
+    state.annexRows = anexosResult.rows.map(fromDatosCompletos);
     localStorage.setItem(STORAGE.annexes, JSON.stringify(state.annexRows));
   }
 
-  if (registrosControl.length) {
-    state.controlRows = registrosControl.map(fromDatosCompletos);
+  if (controlResult.succeeded) {
+    state.controlRows = controlResult.rows.map(fromDatosCompletos);
     localStorage.setItem(STORAGE.control, JSON.stringify(state.controlRows));
   }
 
-  if (auditoria.length) {
-    state.auditRows = auditoria.map((row) => ({ ...fromDatosCompletos(row), id: row.id_local || fromDatosCompletos(row).id }));
+  if (auditoriaResult.succeeded) {
+    state.auditRows = auditoriaResult.rows.map((row) => ({ ...fromDatosCompletos(row), id: row.id_local || fromDatosCompletos(row).id }));
     localStorage.setItem(STORAGE.audit, JSON.stringify(state.auditRows));
-  }
-
-  if (!hasRemoteMasters && !hasRemoteOperations) {
-    await Promise.all([
-      persistMastersToSupabase(state.masterData),
-      persistAnnexesToSupabase(state.annexRows),
-      persistControlToSupabase(state.controlRows),
-      persistAuditsToSupabase(state.auditRows),
-    ]);
   }
 }
 
