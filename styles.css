@@ -925,14 +925,20 @@ textarea { min-height: 86px; resize: vertical; }
 .generated-annex-table td:nth-child(9) { width: 112px; text-align: center; }
 .generated-annex-table th:nth-child(10),
 .generated-annex-table td:nth-child(10) {
-  position: static;
   width: 80px;
   text-align: center;
-  background: #ffffff;
   box-shadow: none;
 }
-.generated-annex-table th:nth-child(10) { background: #20314f; }
-.generated-annex-table td:nth-child(10) { background: transparent; }
+.generated-annex-table th:nth-child(10) {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #20314f;
+}
+.generated-annex-table td:nth-child(10) {
+  position: static;
+  background: transparent;
+}
 .generated-annex-table tbody tr:hover td:nth-child(1),
 .generated-annex-table tbody tr:hover td:nth-child(10) { background: #f3faf6; }
 .generated-annex-table tr.is-cancelled td:nth-child(1),
