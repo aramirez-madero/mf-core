@@ -513,6 +513,10 @@ async function initializeAuth() {
   updateAuthUi();
   supabase.auth.onAuthStateChange(async (event, session) => {
     currentSession = session;
+    if (event === 'TOKEN_REFRESHED') {
+      updateAuthUi();
+      return;
+    }
     if (event === 'PASSWORD_RECOVERY') {
       passwordRecoveryMode = true;
       authNotice = 'Ingresa tu nueva contraseña.';
@@ -2020,6 +2024,8 @@ function generateAnnexes() {
       version_anexo: 'v1',
       link_anexo_word: `pendiente/${row.operacion}-Anexo-Tipo-1.docx`,
       fecha_generacion: generatedAt,
+      creado_en: generatedAt,
+      actualizado_en: generatedAt,
       usuario_generador: 'usuario.local',
     };
     return {
@@ -2790,7 +2796,12 @@ async function saveAnnexEdition(event) {
     } : row);
   }
   localStorage.setItem(STORAGE.annexes, JSON.stringify(state.annexRows));
-  await persistAnnexEditionToSupabase(updated);
+  const persistedAnnex = await persistAnnexEditionToSupabase(updated);
+  if (persistedAnnex) {
+    const confirmed = { ...updated, ...persistedAnnex };
+    state.annexRows = state.annexRows.map((row) => row.id === id ? confirmed : row);
+    localStorage.setItem(STORAGE.annexes, JSON.stringify(state.annexRows));
+  }
   if (controlExists) save(STORAGE.control, state.controlRows);
   appendAudit(
     'anexos',
@@ -2834,7 +2845,14 @@ function recalculateAnnexLine(line) {
 }
 
 function rebuildEditedAnnex(annex, editedLines) {
-  const recalculated = calculateAnnexGroup({ ...annex, ...editedLines[0], lineas: editedLines });
+  const recalculated = calculateAnnexGroup({
+    ...annex,
+    ...editedLines[0],
+    id: annex.id,
+    fecha_generacion: annex.fecha_generacion,
+    creado_en: annex.creado_en || annex.fecha_generacion,
+    lineas: editedLines,
+  });
   const editedAt = new Date().toISOString();
   const updated = {
     ...annex,
@@ -2843,6 +2861,8 @@ function rebuildEditedAnnex(annex, editedLines) {
     fecha_desembolso: editedLines[0]?.fecha_desembolso || annex.fecha_desembolso,
     fecha_vencimiento: editedLines[0]?.fecha_vencimiento || annex.fecha_vencimiento,
     fecha_pago: editedLines[0]?.fecha_vencimiento || annex.fecha_pago,
+    fecha_generacion: annex.fecha_generacion,
+    creado_en: annex.creado_en || annex.fecha_generacion,
     fecha_edicion_anexo: editedAt,
     actualizado_en: editedAt,
     usuario_edicion_anexo: currentUserName(),
@@ -4020,11 +4040,20 @@ async function readSupabaseState(label, operation) {
 }
 
 async function persistAnnexEditionToSupabase(row) {
-  if (!row?.id) return;
-  await safeSupabaseWrite('edicion de anexo generado', () => supabase
-    .from('anexos_generados')
-    .update(mapAnnexToDb(row))
-    .eq('id_local', row.id));
+  if (!row?.id || !supabaseReady() || !currentSession) return row;
+  try {
+    const { data, error } = await supabase
+      .from('anexos_generados')
+      .upsert(mapAnnexToDb(row), { onConflict: 'id_local' })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return fromDatosCompletos(data);
+  } catch (error) {
+    console.warn('Supabase no pudo confirmar la edicion del anexo:', error.message || error);
+    showErrorDialog('No se pudo guardar la edicion', 'Los cambios permanecen temporalmente en este navegador, pero Supabase no pudo confirmarlos. Intenta nuevamente antes de salir.');
+    return null;
+  }
 }
 
 async function persistControlToSupabase(rows) {
