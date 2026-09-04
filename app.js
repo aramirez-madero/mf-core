@@ -1612,11 +1612,13 @@ function renderAnnexParams() {
         const key = annexGroupKey(group);
         const params = getAnnexParams(key);
         const hasReferidor = groupRequiresAdminExpense(group);
-        const bankExpense = params.gastosBancarios === '' ? fixed2(automaticBankExpense(group.moneda)) : params.gastosBancarios;
-        const tnmValue = params.tnm === '' ? '' : formatDecimalInput(params.tnm);
-        const commissionValue = params.comisionDesembolso === '' ? '' : formatDecimalInput(params.comisionDesembolso);
-        const coverageValue = params.margenCobertura === '' ? '' : formatDecimalInput(params.margenCobertura);
-        const adminValue = params.gastosAdministrativos === '' ? '' : formatDecimalInput(params.gastosAdministrativos);
+        const bankExpenseValue = params.gastosBancarios === ''
+          ? fixed2(automaticBankExpense(group.moneda))
+          : String(params.gastosBancarios);
+        const tnmValue = params.tnm === '' ? '' : String(params.tnm);
+        const commissionValue = params.comisionDesembolso === '' ? '' : String(params.comisionDesembolso);
+        const coverageValue = params.margenCobertura === '' ? '' : String(params.margenCobertura);
+        const adminValue = params.gastosAdministrativos === '' ? '' : String(params.gastosAdministrativos);
         return `
           <div class="annex-param-row">
             <div class="annex-param-title">
@@ -1636,11 +1638,12 @@ function renderAnnexParams() {
               ${hasReferidor ? `<input data-annex-param="${escapeAttr(key)}" data-field="gastosAdministrativos" type="text" inputmode="decimal" value="${escapeAttr(adminValue)}" />` : '<span class="annex-static-value">No aplica</span>'}
             </label>
             <label>Gastos banc.
-              <input data-annex-param="${escapeAttr(key)}" data-field="gastosBancarios" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="${escapeAttr(formatDecimalInput(bankExpense))}" />
+              <input data-annex-param="${escapeAttr(key)}" data-field="gastosBancarios" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="${escapeAttr(bankExpenseValue)}" />
             </label>
           </div>`;
       }).join('')}
     </div>`;
+  restoreAnnexParamFocus();
 }
 
 function cacheAnnexParamInput(event) {
@@ -1665,7 +1668,8 @@ function rememberAnnexParamFocus(event) {
   const input = event.target.closest('[data-annex-param]');
   if (!input) return;
   annexParamFocusState = {
-    input,
+    key: input.dataset.annexParam,
+    field: input.dataset.field,
     start: input.selectionStart,
     end: input.selectionEnd,
   };
@@ -1673,11 +1677,14 @@ function rememberAnnexParamFocus(event) {
 
 function restoreAnnexParamFocus() {
   const saved = annexParamFocusState;
-  if (!saved?.input?.isConnected) return;
+  if (!saved?.key || !saved?.field) return;
   window.setTimeout(() => {
-    if (!saved.input.isConnected) return;
-    saved.input.focus({ preventScroll: true });
-    if (saved.start != null && saved.end != null) saved.input.setSelectionRange(saved.start, saved.end);
+    const input = Array.from(document.querySelectorAll('[data-annex-param]')).find((candidate) => (
+      candidate.dataset.annexParam === saved.key && candidate.dataset.field === saved.field
+    ));
+    if (!input) return;
+    input.focus({ preventScroll: true });
+    if (saved.start != null && saved.end != null) input.setSelectionRange(saved.start, saved.end);
   }, 0);
 }
 
