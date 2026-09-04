@@ -231,13 +231,29 @@
         </section>
 
         <section class="module" id="control">
-          <div class="panel">
-            <div class="section-title">
+          <div class="panel control-panel">
+            <div class="section-title control-header">
               <div>
                 <p class="eyebrow">Base operativa</p>
                 <h3>Control</h3>
+                <p class="section-description">Consulta los anexos confirmados y descarga su documentaci&oacute;n.</p>
               </div>
-              <div class="inline-actions">
+            </div>
+            <div class="control-toolbar">
+              <label class="toolbar-field control-search-field">Buscar
+                <input id="control-search" class="search-input" type="search" placeholder="Anexo, operaci&oacute;n, cliente o adquiriente..." />
+              </label>
+              <label class="toolbar-field">Moneda
+                <select id="control-currency-filter">
+                  <option value="">Todas</option>
+                  <option value="PEN">PEN</option>
+                  <option value="USD">USD</option>
+                </select>
+              </label>
+              <div class="control-toolbar-actions">
+                <button class="secondary icon-only-button" id="clear-control-filters" type="button" title="Limpiar filtros" aria-label="Limpiar filtros">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4H3.5A9 9 0 1 0 12 3V1L8 4l4 3V5Zm-3 6h6v2H9v-2Z"/></svg>
+                </button>
                 <select id="export-control-format" class="export-select">
                   <option value="">Exportar</option>
                   <option value="excel">Excel</option>

@@ -220,6 +220,10 @@ let state = {
   annexGeneratedPageSize: 20,
   previewPage: 1,
   previewPageSize: 20,
+  controlSearch: '',
+  controlCurrency: '',
+  controlPage: 1,
+  controlPageSize: 20,
   activeMaster: 'adquirentes',
   masterSearch: '',
   masterPage: 1,
@@ -375,6 +379,24 @@ async function boot() {
     if (!event.target.value) return;
     exportControl(event.target.value);
     event.target.value = '';
+  });
+  $('control-search').addEventListener('input', (event) => {
+    state.controlSearch = event.target.value;
+    state.controlPage = 1;
+    renderControl();
+  });
+  $('control-currency-filter').addEventListener('change', (event) => {
+    state.controlCurrency = event.target.value;
+    state.controlPage = 1;
+    renderControl();
+  });
+  $('clear-control-filters').addEventListener('click', () => {
+    state.controlSearch = '';
+    state.controlCurrency = '';
+    state.controlPage = 1;
+    $('control-search').value = '';
+    $('control-currency-filter').value = '';
+    renderControl();
   });
   $('master-selector').addEventListener('change', (event) => {
     state.activeMaster = event.target.value;
@@ -2505,23 +2527,24 @@ function renderGeneratedAnnexes() {
   const canCancelAnnex = canDo('cancel_annexes');
   const allVisibleRowsSelected = rows.length > 0 && rows.every((row) => state.annexSelectedIds.has(row.id));
   container.innerHTML = `
-    ${pendingRows.length ? `
-      <div class="workflow-notice">
-        <strong>${pendingRows.length} pendientes de Control</strong>
+    <div class="generated-overview-bar">
+      <div class="generated-status-counts">
+        <span class="validation-count is-observed"><strong>${pendingRows.length}</strong> pendientes</span>
+        <span class="validation-count is-ready"><strong>${controlCount}</strong> en Control</span>
+        <span class="validation-count is-duplicate"><strong>${cancelledCount}</strong> cancelados</span>
       </div>
-    ` : ''}
-    <div class="bulk-actions ${selectedRows.length ? 'has-selection' : ''}">
-      <label class="select-all-row">
-        <input type="checkbox" id="select-visible-annexes" ${allVisibleRowsSelected ? 'checked' : ''} />
-        Seleccionar visibles
-      </label>
-      ${selectedRows.length ? `<span class="selection-count">${selectedRows.length} seleccionados</span>` : ''}
-      ${selectedPendingRows.length && canSendControl ? `<button class="secondary compact-action" type="button" id="bulk-send-control">Pasar a Control</button>` : ''}
-      ${selectedPendingRows.length && canCancelAnnex ? `<button class="danger compact-action" type="button" id="bulk-cancel-annexes">Cancelar</button>` : ''}
+      <div class="bulk-actions ${selectedRows.length ? 'has-selection' : ''}">
+        <label class="select-all-row">
+          <input type="checkbox" id="select-visible-annexes" ${allVisibleRowsSelected ? 'checked' : ''} />
+          Seleccionar visibles
+        </label>
+        ${selectedRows.length ? `<span class="selection-count">${selectedRows.length} seleccionados</span>` : ''}
+        ${selectedPendingRows.length && canSendControl ? `<button class="secondary compact-action" type="button" id="bulk-send-control">Pasar a Control</button>` : ''}
+        ${selectedPendingRows.length && canCancelAnnex ? `<button class="danger compact-action" type="button" id="bulk-cancel-annexes">Cancelar</button>` : ''}
+      </div>
     </div>
     <div class="list-toolbar">
       <span>${filteredRows.length ? `Mostrando ${pageStart + 1}-${Math.min(pageStart + pageSize, filteredRows.length)} de ${filteredRows.length} anexos` : 'No hay anexos para mostrar'}</span>
-      <span>Pendientes: ${pendingRows.length} &middot; En Control: ${controlCount} &middot; Cancelados: ${cancelledCount}</span>
     </div>
     <div class="table-wrap">
       <table class="data-table generated-annex-table">
@@ -2623,6 +2646,7 @@ function renderGeneratedAnnexes() {
   container.querySelectorAll('[data-download-annex]').forEach((button) => button.addEventListener('click', () => openGeneratedAnnex(button.dataset.downloadAnnex, true)));
   container.querySelectorAll('[data-send-control]').forEach((button) => button.addEventListener('click', () => confirmAnnexToControl(button.dataset.sendControl)));
   container.querySelectorAll('[data-cancel-annex]').forEach((button) => button.addEventListener('click', () => cancelAnnex(button.dataset.cancelAnnex)));
+  container.querySelector('.table-wrap')?.addEventListener('scroll', closeRowMenus, { passive: true });
   container.querySelectorAll('.row-menu').forEach((menu) => {
     menu.addEventListener('toggle', () => {
       if (!menu.open) return;
@@ -2847,6 +2871,7 @@ function sendAnnexToControl(annex) {
   };
 
   state.controlRows = [controlRecord, ...state.controlRows.filter((row) => row.id !== annex.id)];
+  state.controlPage = 1;
   state.annexRows = state.annexRows.map((row) => row.id === annex.id ? controlRecord : row);
 }
 
@@ -2973,9 +2998,22 @@ function renderMasters() {
 
 function renderControl() {
   const rows = state.controlRows || [];
+  const query = normalizeHeader(state.controlSearch);
+  const filteredRows = rows.filter((row) => {
+    const matchesCurrency = !state.controlCurrency || normalizeCurrency(row.moneda) === state.controlCurrency;
+    const haystack = [annexCode(row), row.operacion, row.cliente, row.ruc_cliente, row.obligado, row.ruc_obligado, row.factura]
+      .map(normalizeHeader)
+      .join(' ');
+    return matchesCurrency && (!query || haystack.includes(query));
+  });
+  const pageSize = Number(state.controlPageSize) || 20;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  state.controlPage = Math.min(Math.max(1, state.controlPage || 1), totalPages);
+  const start = (state.controlPage - 1) * pageSize;
+  const pageRows = filteredRows.slice(start, start + pageSize);
   $('control-editor').innerHTML = `
     <div class="list-toolbar">
-      <span>${rows.length} registros en Control</span>
+      <span>${filteredRows.length ? `Mostrando ${start + 1}-${Math.min(start + pageSize, filteredRows.length)} de ${filteredRows.length} registros` : 'No hay registros para mostrar'}</span>
       <span>Solo anexos confirmados</span>
     </div>
     <div class="table-wrap control-table-wrap">
@@ -2995,17 +3033,17 @@ function renderControl() {
           </tr>
         </thead>
         <tbody>
-          ${rows.length ? rows.map((row) => `
+          ${pageRows.length ? pageRows.map((row) => `
             <tr>
-              <td><strong>${escapeHtml(annexCode(row))}</strong></td>
+              <td><strong title="${escapeAttr(annexCode(row))}">${escapeHtml(annexCode(row))}</strong></td>
               <td>${escapeHtml(row.operacion || '-')}</td>
               <td>${escapeHtml(formatDateOnly(row.fecha_pase_control || row.fecha_generacion))}</td>
               <td>
-                <strong>${escapeHtml(row.cliente || '-')}</strong>
+                <strong title="${escapeAttr(row.cliente || '')}">${escapeHtml(row.cliente || '-')}</strong>
                 <small>${escapeHtml(row.ruc_cliente || '')}</small>
               </td>
               <td>
-                <strong>${escapeHtml(row.obligado || '-')}</strong>
+                <strong title="${escapeAttr(row.obligado || '')}">${escapeHtml(row.obligado || '-')}</strong>
                 <small>${escapeHtml(row.ruc_obligado || row.codigo_obligado || '')}</small>
               </td>
               <td>${escapeHtml(row.factura || '-')}</td>
@@ -3021,8 +3059,33 @@ function renderControl() {
         </tbody>
       </table>
     </div>
+    <div class="control-pagination-bar">
+      <label>Filas por pagina
+        <select id="control-page-size">
+          ${[10, 20, 50, 100].map((size) => `<option value="${size}" ${pageSize === size ? 'selected' : ''}>${size}</option>`).join('')}
+        </select>
+      </label>
+      <div class="pagination">
+        <button class="secondary compact-action" id="control-prev" type="button" ${state.controlPage <= 1 ? 'disabled' : ''}>Anterior</button>
+        <span>Pagina ${state.controlPage} de ${totalPages}</span>
+        <button class="secondary compact-action" id="control-next" type="button" ${state.controlPage >= totalPages ? 'disabled' : ''}>Siguiente</button>
+      </div>
+    </div>
   `;
   const container = $('control-editor');
+  container.querySelector('#control-page-size')?.addEventListener('change', (event) => {
+    state.controlPageSize = Number(event.target.value) || 20;
+    state.controlPage = 1;
+    renderControl();
+  });
+  container.querySelector('#control-prev')?.addEventListener('click', () => {
+    state.controlPage = Math.max(1, state.controlPage - 1);
+    renderControl();
+  });
+  container.querySelector('#control-next')?.addEventListener('click', () => {
+    state.controlPage += 1;
+    renderControl();
+  });
   container.querySelectorAll('[data-view-annex]').forEach((button) => button.addEventListener('click', () => openGeneratedAnnex(button.dataset.viewAnnex)));
   container.querySelectorAll('[data-download-annex]').forEach((button) => button.addEventListener('click', () => openGeneratedAnnex(button.dataset.downloadAnnex, true)));
 }
