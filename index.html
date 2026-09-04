@@ -195,15 +195,23 @@
         </section>
 
         <section class="module" id="maestros">
-          <div class="panel">
-            <div class="section-title">
+          <div class="panel master-panel">
+            <div class="section-title master-header">
               <div>
                 <p class="eyebrow">Datos base</p>
                 <h3>Maestros internos</h3>
+                <p class="section-description">Consulta y administra la informaci&oacute;n base utilizada por las operaciones.</p>
               </div>
-              <div class="inline-actions">
+              <button class="primary" id="add-master" type="button">Nuevo registro</button>
+            </div>
+            <div class="master-toolbar">
+              <label class="toolbar-field">Maestro
                 <select id="master-selector"></select>
-                <input id="master-search" class="search-input" type="search" placeholder="Buscar en maestro..." />
+              </label>
+              <label class="toolbar-field master-search-field">Buscar
+                <input id="master-search" class="search-input" type="search" placeholder="Nombre, documento o c&oacute;digo..." />
+              </label>
+              <div class="master-toolbar-actions">
                 <button class="secondary icon-only-button" id="clear-master-filters" type="button" title="Limpiar" aria-label="Limpiar">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.3 4H3.5A9 9 0 1 0 12 3V1L8 4l4 3V5Zm-3 6h6v2H9v-2Z"/></svg>
                 </button>
@@ -216,9 +224,6 @@
                   <option value="excel">Excel</option>
                   <option value="csv">CSV</option>
                 </select>
-                <button class="primary icon-only-button" id="add-master" type="button" title="Agregar registro" aria-label="Agregar registro">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z"/></svg>
-                </button>
               </div>
             </div>
             <div id="master-editor"></div>

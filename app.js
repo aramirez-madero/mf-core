@@ -216,6 +216,8 @@ let state = {
   annexGeneratedStatus: '',
   annexGeneratedSort: 'fecha_desc',
   annexSelectedIds: new Set(),
+  annexGeneratedPage: 1,
+  annexGeneratedPageSize: 20,
   previewPage: 1,
   previewPageSize: 20,
   activeMaster: 'adquirentes',
@@ -329,19 +331,23 @@ async function boot() {
   $('annex-params').addEventListener('focusout', commitAnnexParamInput);
   $('annex-generated-search').addEventListener('input', (event) => {
     state.annexGeneratedSearch = event.target.value;
+    state.annexGeneratedPage = 1;
     renderGeneratedAnnexes();
   });
   $('annex-generated-date').addEventListener('change', (event) => {
     state.annexGeneratedDate = event.target.value;
+    state.annexGeneratedPage = 1;
     renderGeneratedAnnexes();
   });
   $('annex-generated-status').addEventListener('change', (event) => {
     state.annexGeneratedStatus = event.target.value;
+    state.annexGeneratedPage = 1;
     state.annexSelectedIds.clear();
     renderGeneratedAnnexes();
   });
   $('annex-generated-sort').addEventListener('change', (event) => {
     state.annexGeneratedSort = event.target.value;
+    state.annexGeneratedPage = 1;
     renderGeneratedAnnexes();
   });
   $('clear-annex-generated-filters').addEventListener('click', () => {
@@ -349,6 +355,7 @@ async function boot() {
     state.annexGeneratedDate = '';
     state.annexGeneratedStatus = '';
     state.annexGeneratedSort = 'fecha_desc';
+    state.annexGeneratedPage = 1;
     state.annexSelectedIds.clear();
     $('annex-generated-search').value = '';
     $('annex-generated-date').value = '';
@@ -1996,6 +2003,7 @@ function generateAnnexes() {
   save(STORAGE.annexes, state.annexRows);
   save(STORAGE.preview, state.previewRows);
   appendAudit('anexos', generated.map((row) => row.id).join(','), 'Generacion de anexos', 'Listo para generar', 'Pendiente de pasar a Control', `${generated.length} anexos generados y pendientes de confirmacion.`);
+  state.annexGeneratedPage = 1;
   switchModule('anexos');
   switchAnnexTab('generados');
   renderAll();
@@ -2482,9 +2490,15 @@ function renderPreview() {
 function renderGeneratedAnnexes() {
   const container = $('annex-generated-editor');
   if (!container) return;
-  const rows = sortGeneratedAnnexes(filterGeneratedAnnexes(state.annexRows || []));
+  const filteredRows = sortGeneratedAnnexes(filterGeneratedAnnexes(state.annexRows || []));
+  const pageSize = Number(state.annexGeneratedPageSize) || 20;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  state.annexGeneratedPage = Math.min(Math.max(1, state.annexGeneratedPage || 1), totalPages);
+  const pageStart = (state.annexGeneratedPage - 1) * pageSize;
+  const rows = filteredRows.slice(pageStart, pageStart + pageSize);
   const pendingRows = (state.annexRows || []).filter(isAnnexPendingControl);
   const cancelledCount = (state.annexRows || []).filter(isAnnexCancelled).length;
+  const controlCount = (state.annexRows || []).filter((row) => row.estado_control === 'En Control').length;
   const selectedRows = rows.filter((row) => state.annexSelectedIds.has(row.id));
   const selectedPendingRows = selectedRows.filter(isAnnexPendingControl);
   const canSendControl = canDo('send_control');
@@ -2506,8 +2520,8 @@ function renderGeneratedAnnexes() {
       ${selectedPendingRows.length && canCancelAnnex ? `<button class="danger compact-action" type="button" id="bulk-cancel-annexes">Cancelar</button>` : ''}
     </div>
     <div class="list-toolbar">
-      <span>${rows.length} anexos encontrados</span>
-      <span>Pendientes: ${pendingRows.length} · Cancelados: ${cancelledCount}</span>
+      <span>${filteredRows.length ? `Mostrando ${pageStart + 1}-${Math.min(pageStart + pageSize, filteredRows.length)} de ${filteredRows.length} anexos` : 'No hay anexos para mostrar'}</span>
+      <span>Pendientes: ${pendingRows.length} &middot; En Control: ${controlCount} &middot; Cancelados: ${cancelledCount}</span>
     </div>
     <div class="table-wrap">
       <table class="data-table generated-annex-table">
@@ -2535,14 +2549,14 @@ function renderGeneratedAnnexes() {
                 <strong>${escapeHtml(annexCode(row))}</strong>
                 <small>Op. ${escapeHtml(row.operacion || '-')}</small>
               </td>
-              <td>${escapeHtml(formatLimaDateTime(row.creado_en || row.fecha_generacion))}</td>
-              <td>${escapeHtml(formatLimaDateTime(row.actualizado_en || row.fecha_edicion_anexo || row.creado_en || row.fecha_generacion))}</td>
+              <td class="annex-date-cell">${escapeHtml(formatLimaDateTime(row.creado_en || row.fecha_generacion))}</td>
+              <td class="annex-date-cell">${escapeHtml(formatLimaDateTime(row.actualizado_en || row.fecha_edicion_anexo || row.creado_en || row.fecha_generacion))}</td>
               <td>
-                <strong>${escapeHtml(row.cliente || '-')}</strong>
+                <strong title="${escapeAttr(row.cliente || '')}">${escapeHtml(row.cliente || '-')}</strong>
                 <small>${escapeHtml(row.ruc_cliente || '')}</small>
               </td>
               <td>
-                <strong>${escapeHtml(row.obligado || '-')}</strong>
+                <strong title="${escapeAttr(row.obligado || '')}">${escapeHtml(row.obligado || '-')}</strong>
                 <small>${escapeHtml(row.ruc_obligado || row.codigo_obligado || '')}</small>
               </td>
               <td>${escapeHtml(row.moneda || '-')}</td>
@@ -2564,6 +2578,18 @@ function renderGeneratedAnnexes() {
         </tbody>
       </table>
     </div>
+    <div class="generated-pagination-bar">
+      <label>Filas por pagina
+        <select id="annex-generated-page-size">
+          ${[10, 20, 50, 100].map((size) => `<option value="${size}" ${pageSize === size ? 'selected' : ''}>${size}</option>`).join('')}
+        </select>
+      </label>
+      <div class="pagination">
+        <button class="secondary compact-action" id="annex-generated-prev" type="button" ${state.annexGeneratedPage <= 1 ? 'disabled' : ''}>Anterior</button>
+        <span>Pagina ${state.annexGeneratedPage} de ${totalPages}</span>
+        <button class="secondary compact-action" id="annex-generated-next" type="button" ${state.annexGeneratedPage >= totalPages ? 'disabled' : ''}>Siguiente</button>
+      </div>
+    </div>
   `;
   container.querySelector('#select-visible-annexes')?.addEventListener('change', (event) => {
     rows.forEach((row) => {
@@ -2579,6 +2605,19 @@ function renderGeneratedAnnexes() {
   }));
   container.querySelector('#bulk-send-control')?.addEventListener('click', () => sendSelectedAnnexesToControl());
   container.querySelector('#bulk-cancel-annexes')?.addEventListener('click', () => cancelSelectedAnnexes());
+  container.querySelector('#annex-generated-page-size')?.addEventListener('change', (event) => {
+    state.annexGeneratedPageSize = Number(event.target.value) || 20;
+    state.annexGeneratedPage = 1;
+    renderGeneratedAnnexes();
+  });
+  container.querySelector('#annex-generated-prev')?.addEventListener('click', () => {
+    state.annexGeneratedPage = Math.max(1, state.annexGeneratedPage - 1);
+    renderGeneratedAnnexes();
+  });
+  container.querySelector('#annex-generated-next')?.addEventListener('click', () => {
+    state.annexGeneratedPage += 1;
+    renderGeneratedAnnexes();
+  });
   container.querySelectorAll('[data-view-annex]').forEach((button) => button.addEventListener('click', () => openGeneratedAnnex(button.dataset.viewAnnex)));
   container.querySelectorAll('[data-edit-annex]').forEach((button) => button.addEventListener('click', () => openAnnexEditModal(button.dataset.editAnnex)));
   container.querySelectorAll('[data-download-annex]').forEach((button) => button.addEventListener('click', () => openGeneratedAnnex(button.dataset.downloadAnnex, true)));
@@ -2874,8 +2913,8 @@ function renderMasters() {
 
   $('master-editor').innerHTML = `
     <div class="list-toolbar">
-      <span>${filteredRows.length} registros encontrados</span>
-      <span>Pagina ${state.masterPage} de ${totalPages}</span>
+      <span>${filteredRows.length ? `Mostrando ${start + 1}-${Math.min(start + state.masterPageSize, filteredRows.length)} de ${filteredRows.length} registros` : 'No hay registros para mostrar'}</span>
+      <span>${escapeHtml(view.title)}</span>
     </div>
     <div class="table-wrap master-table-wrap">
       <table class="data-table master-table master-${state.activeMaster}">
@@ -2888,7 +2927,10 @@ function renderMasters() {
         <tbody>
           ${pageRows.length ? pageRows.map((row) => `
             <tr>
-              ${view.fields.map((field) => `<td>${field === 'estado' ? statusBadge(row[field]) : escapeHtml(formatValue(displayFieldValue(field, row[field])))}</td>`).join('')}
+              ${view.fields.map((field) => {
+                const displayed = formatValue(displayFieldValue(field, row[field]));
+                return `<td ${field === 'estado' ? '' : `title="${escapeAttr(displayed)}"`}>${field === 'estado' ? statusBadge(row[field]) : escapeHtml(displayed)}</td>`;
+              }).join('')}
               <td>
                 <div class="actions">
                   <button class="icon-action" title="Editar" aria-label="Editar" data-type="master" data-scope="${state.activeMaster}" data-edit="${row.id}">${iconEdit()}</button>
@@ -2900,9 +2942,17 @@ function renderMasters() {
         </tbody>
       </table>
     </div>
-    <div class="pagination">
-      <button class="secondary" id="master-prev" ${state.masterPage <= 1 ? 'disabled' : ''}>Anterior</button>
-      <button class="secondary" id="master-next" ${state.masterPage >= totalPages ? 'disabled' : ''}>Siguiente</button>
+    <div class="master-pagination-bar">
+      <label>Filas por pagina
+        <select id="master-page-size">
+          ${[10, 25, 50, 100].map((size) => `<option value="${size}" ${state.masterPageSize === size ? 'selected' : ''}>${size}</option>`).join('')}
+        </select>
+      </label>
+      <div class="pagination">
+        <button class="secondary compact-action" id="master-prev" ${state.masterPage <= 1 ? 'disabled' : ''}>Anterior</button>
+        <span>Pagina ${state.masterPage} de ${totalPages}</span>
+        <button class="secondary compact-action" id="master-next" ${state.masterPage >= totalPages ? 'disabled' : ''}>Siguiente</button>
+      </div>
     </div>
   `;
   bindCrudButtons('master', state.activeMaster, $('master-editor'));
@@ -2912,6 +2962,11 @@ function renderMasters() {
   });
   $('master-next').addEventListener('click', () => {
     state.masterPage = Math.min(totalPages, state.masterPage + 1);
+    renderMasters();
+  });
+  $('master-page-size').addEventListener('change', (event) => {
+    state.masterPageSize = Number(event.target.value) || 25;
+    state.masterPage = 1;
     renderMasters();
   });
 }
