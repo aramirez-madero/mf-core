@@ -1079,10 +1079,20 @@ function showErrorDialog(title, message) {
     showToast(`${title}: ${message}`);
     return;
   }
+  $('error-kicker').textContent = 'Error';
   $('error-title').textContent = title || 'No se pudo completar la accion';
   $('error-message').textContent = message || 'Ocurrio un error inesperado.';
   if (typeof modal.showModal === 'function') modal.showModal();
   else showToast(`${title}: ${message}`);
+}
+
+function showDetailDialog(title, message) {
+  const modal = $('error-modal');
+  if (!modal) return;
+  $('error-kicker').textContent = 'Detalle';
+  $('error-title').textContent = title;
+  $('error-message').textContent = message || '-';
+  modal.showModal();
 }
 
 function initializeCounters() {
@@ -2492,7 +2502,10 @@ function renderPreview() {
       <td>${escapeHtml(row.participante_origen_codigo)}</td>
       <td>${escapeHtml(row.originador || '-')}</td>
       <td>${badge(row.estado_validacion)}</td>
-      <td title="${escapeAttr(row.observaciones || '')}">${escapeHtml(row.observaciones || '-')}</td>
+      <td class="preview-observation-cell">
+        <span title="${escapeAttr(row.observaciones || '')}">${escapeHtml(row.observaciones || '-')}</span>
+        ${String(row.observaciones || '').length > 36 ? `<button type="button" data-view-observation="${row.id}">Ver detalle</button>` : ''}
+      </td>
       <td class="actions">
         <button class="icon-action danger-icon" title="Eliminar" aria-label="Eliminar" data-delete-preview="${row.id}">${iconDelete()}</button>
       </td>
@@ -2507,6 +2520,10 @@ function renderPreview() {
   $('preview-page-next').disabled = state.previewPage >= totalPages;
 
   tbody.querySelectorAll('[data-delete-preview]').forEach((button) => button.addEventListener('click', () => deleteRecord('preview', null, button.dataset.deletePreview)));
+  tbody.querySelectorAll('[data-view-observation]').forEach((button) => button.addEventListener('click', () => {
+    const row = state.previewRows.find((item) => item.id === button.dataset.viewObservation);
+    if (row) showDetailDialog('Observacion de validacion', row.observaciones);
+  }));
 }
 
 function renderGeneratedAnnexes() {

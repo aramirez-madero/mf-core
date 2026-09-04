@@ -565,6 +565,28 @@ body.auth-locked .app-shell { display: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.preview-data-table td.preview-observation-cell {
+  overflow: visible;
+  white-space: normal;
+}
+.preview-observation-cell > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-observation-cell > button {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.preview-observation-cell > button:hover { color: var(--primary-dark); }
 .preview-pagination {
   align-items: center;
 }
@@ -859,10 +881,10 @@ textarea { min-height: 86px; resize: vertical; }
   font-weight: 700;
 }
 .generated-annex-table .actions {
-  justify-content: center;
-  flex-wrap: nowrap;
-  gap: 7px;
+  display: table-cell;
+  text-align: center;
 }
+.generated-annex-table .actions .row-menu { margin: 0 auto; }
 .generated-annex-table .badge {
   max-width: 100%;
   justify-content: center;
