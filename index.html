@@ -87,35 +87,52 @@
           </div>
 
           <div class="annex-tab active" id="annex-tab-generar">
-          <div class="panel">
-            <div class="section-title">
+          <div class="panel annex-generate-panel">
+            <div class="section-title annex-step-header">
               <div>
                 <p class="eyebrow">Paso 1</p>
                 <h3>Subir Excel o CSV de CAVALI</h3>
+                <p class="section-description">Importa el archivo y completa los par&aacute;metros de cada operaci&oacute;n antes de generar.</p>
               </div>
               <label class="file-button">
-                Importar
+                Importar archivo
                 <input id="file" type="file" accept=".csv,.xlsx,.xls" />
               </label>
-              <div class="inline-actions">
-                <button class="primary" id="generate-annexes" disabled>Generar anexos</button>
-                <button class="danger" id="cancel-preview-import" type="button" disabled>Cancelar carga</button>
-              </div>
             </div>
             <div class="annex-params" id="annex-params"></div>
             <div class="summary compact-summary" id="summary"></div>
+            <div class="annex-generation-footer">
+              <div class="validation-overview" id="preview-status-summary"></div>
+              <div class="inline-actions">
+                <button class="danger compact-action" id="cancel-preview-import" type="button" disabled>Cancelar carga</button>
+                <button class="primary" id="generate-annexes" disabled>Generar anexos</button>
+              </div>
+            </div>
           </div>
 
-          <div class="panel">
-            <div class="section-title">
+          <div class="panel annex-validation-panel">
+            <div class="section-title annex-step-header">
               <div>
                 <p class="eyebrow">Paso 2</p>
                 <h3>Validar registros para generacion</h3>
+                <p class="section-description">Revisa el resultado de la validaci&oacute;n antes de continuar.</p>
               </div>
               <span class="muted">Solo los registros listos se pueden generar</span>
             </div>
-            <div class="table-wrap">
-              <table>
+            <div class="preview-table-toolbar">
+              <span id="preview-page-status">Sin registros</span>
+              <label>Filas por p&aacute;gina
+                <select id="preview-page-size">
+                  <option value="10">10</option>
+                  <option value="20" selected>20</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </label>
+            </div>
+            <div class="table-scroll-hint">Desliza horizontalmente para consultar todas las columnas.</div>
+            <div class="table-wrap preview-table-wrap">
+              <table class="preview-data-table">
                 <thead>
                   <tr>
                     <th>Proveedor</th>
@@ -135,6 +152,11 @@
                 </thead>
                 <tbody id="preview-table"></tbody>
               </table>
+            </div>
+            <div class="pagination preview-pagination">
+              <button class="secondary compact-action" id="preview-page-prev" type="button">Anterior</button>
+              <span id="preview-page-number">P&aacute;gina 1 de 1</span>
+              <button class="secondary compact-action" id="preview-page-next" type="button">Siguiente</button>
             </div>
           </div>
           </div>

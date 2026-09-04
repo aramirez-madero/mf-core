@@ -216,6 +216,8 @@ let state = {
   annexGeneratedStatus: '',
   annexGeneratedSort: 'fecha_desc',
   annexSelectedIds: new Set(),
+  previewPage: 1,
+  previewPageSize: 20,
   activeMaster: 'adquirentes',
   masterSearch: '',
   masterPage: 1,
@@ -309,6 +311,19 @@ async function boot() {
   });
   $('generate-annexes').addEventListener('click', generateAnnexes);
   $('cancel-preview-import').addEventListener('click', cancelPreviewImport);
+  $('preview-page-size').addEventListener('change', (event) => {
+    state.previewPageSize = Number(event.target.value) || 20;
+    state.previewPage = 1;
+    renderPreview();
+  });
+  $('preview-page-prev').addEventListener('click', () => {
+    state.previewPage = Math.max(1, state.previewPage - 1);
+    renderPreview();
+  });
+  $('preview-page-next').addEventListener('click', () => {
+    state.previewPage += 1;
+    renderPreview();
+  });
   $('annex-params').addEventListener('input', cacheAnnexParamInput);
   $('annex-params').addEventListener('focusin', rememberAnnexParamFocus);
   $('annex-params').addEventListener('focusout', commitAnnexParamInput);
@@ -1115,6 +1130,7 @@ async function handleFile(event) {
   try {
     const rawRows = await parseFile(file);
     state.previewRows = processRows(rawRows, file.name);
+    state.previewPage = 1;
     save(STORAGE.preview, state.previewRows);
     persistImportedLoadToSupabase({
       modulo: 'cargas_cavali',
@@ -1990,6 +2006,7 @@ function cancelPreviewImport() {
   if (!confirm('Cancelar la carga en vista previa?')) return;
   const count = state.previewRows.length;
   state.previewRows = [];
+  state.previewPage = 1;
   state.annexParams = {};
   save(STORAGE.preview, state.previewRows);
   save(STORAGE.annexParams, state.annexParams);
@@ -2409,17 +2426,34 @@ function renderAll() {
 
 function renderMetrics() {
   const valid = state.previewRows.filter((row) => ['Validado', 'Listo para generar'].includes(row.estado_validacion)).length;
+  const observed = state.previewRows.filter((row) => row.estado_validacion === 'Observado').length;
+  const duplicated = state.previewRows.filter((row) => row.estado_validacion === 'Duplicado').length;
   $('generate-annexes').disabled = valid === 0;
   $('cancel-preview-import').disabled = state.previewRows.length === 0;
+  const overview = $('preview-status-summary');
+  if (overview) {
+    overview.innerHTML = state.previewRows.length ? `
+      <span class="validation-count"><strong>${state.previewRows.length}</strong> registros</span>
+      <span class="validation-count is-ready"><strong>${valid}</strong> listos</span>
+      <span class="validation-count is-observed"><strong>${observed}</strong> observados</span>
+      <span class="validation-count is-duplicate"><strong>${duplicated}</strong> duplicados</span>
+    ` : '<span class="muted">Importa un archivo para comenzar.</span>';
+  }
 }
 
 function renderPreview() {
   const tbody = $('preview-table');
-  tbody.innerHTML = state.previewRows.length ? state.previewRows.map((row) => `
+  const totalRows = state.previewRows.length;
+  const pageSize = Number(state.previewPageSize) || 20;
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+  state.previewPage = Math.min(Math.max(1, state.previewPage || 1), totalPages);
+  const start = (state.previewPage - 1) * pageSize;
+  const visibleRows = state.previewRows.slice(start, start + pageSize);
+  tbody.innerHTML = visibleRows.length ? visibleRows.map((row) => `
     <tr>
-      <td>${escapeHtml(row.cliente)}</td>
+      <td title="${escapeAttr(row.cliente || '')}">${escapeHtml(row.cliente)}</td>
       <td>${escapeHtml(row.ruc_cliente)}</td>
-      <td>${escapeHtml(row.obligado)}</td>
+      <td title="${escapeAttr(row.obligado || '')}">${escapeHtml(row.obligado)}</td>
       <td>${escapeHtml(row.codigo_obligado || '-')}</td>
       <td>${escapeHtml(row.factura)}</td>
       <td>${money.format(Number(row.monto_neto_pago) || 0)}</td>
@@ -2428,12 +2462,19 @@ function renderPreview() {
       <td>${escapeHtml(row.participante_origen_codigo)}</td>
       <td>${escapeHtml(row.originador || '-')}</td>
       <td>${badge(row.estado_validacion)}</td>
-      <td>${escapeHtml(row.observaciones || '-')}</td>
+      <td title="${escapeAttr(row.observaciones || '')}">${escapeHtml(row.observaciones || '-')}</td>
       <td class="actions">
         <button class="icon-action danger-icon" title="Eliminar" aria-label="Eliminar" data-delete-preview="${row.id}">${iconDelete()}</button>
       </td>
     </tr>
   `).join('') : '<tr><td class="empty" colspan="13">Carga un archivo CAVALI para ver la validacion previa.</td></tr>';
+
+  $('preview-page-status').textContent = totalRows
+    ? `Mostrando ${start + 1}-${Math.min(start + pageSize, totalRows)} de ${totalRows} registros`
+    : 'Sin registros';
+  $('preview-page-number').textContent = `Pagina ${state.previewPage} de ${totalPages}`;
+  $('preview-page-prev').disabled = state.previewPage <= 1;
+  $('preview-page-next').disabled = state.previewPage >= totalPages;
 
   tbody.querySelectorAll('[data-delete-preview]').forEach((button) => button.addEventListener('click', () => deleteRecord('preview', null, button.dataset.deletePreview)));
 }
