@@ -903,6 +903,27 @@ textarea { min-height: 86px; resize: vertical; }
 .generated-annex-table td {
   vertical-align: middle;
 }
+.sortable-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-weight: inherit;
+}
+.sortable-table-header:hover,
+.sortable-table-header.is-active { color: var(--accent); }
+.sort-indicator {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+}
+.sortable-table-header.is-active .sort-indicator { color: var(--accent); }
 .generated-annex-table th:nth-child(1),
 .generated-annex-table td:nth-child(1) { position: sticky; left: 0; width: 44px; text-align: center; }
 .generated-annex-table td:nth-child(1) { z-index: 2; background: #ffffff; }

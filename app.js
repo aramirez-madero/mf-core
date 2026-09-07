@@ -215,6 +215,8 @@ let state = {
   annexGeneratedDate: '',
   annexGeneratedStatus: '',
   annexGeneratedSort: 'fecha_desc',
+  annexGeneratedColumnSort: '',
+  annexGeneratedColumnDirection: 'asc',
   annexSelectedIds: new Set(),
   annexGeneratedPage: 1,
   annexGeneratedPageSize: 20,
@@ -351,6 +353,7 @@ async function boot() {
   });
   $('annex-generated-sort').addEventListener('change', (event) => {
     state.annexGeneratedSort = event.target.value;
+    state.annexGeneratedColumnSort = '';
     state.annexGeneratedPage = 1;
     renderGeneratedAnnexes();
   });
@@ -359,6 +362,8 @@ async function boot() {
     state.annexGeneratedDate = '';
     state.annexGeneratedStatus = '';
     state.annexGeneratedSort = 'fecha_desc';
+    state.annexGeneratedColumnSort = '';
+    state.annexGeneratedColumnDirection = 'asc';
     state.annexGeneratedPage = 1;
     state.annexSelectedIds.clear();
     $('annex-generated-search').value = '';
@@ -2574,14 +2579,14 @@ function renderGeneratedAnnexes() {
         <thead>
           <tr>
             <th></th>
-            <th>Codigo anexo</th>
-            <th>Fecha de creacion</th>
-            <th>Fecha de modificacion</th>
-            <th>Cliente</th>
-            <th>Adquiriente</th>
-            <th>Moneda</th>
-            <th>Monto desc.</th>
-            <th>Estado</th>
+            ${generatedAnnexSortHeader('Codigo anexo', 'codigo')}
+            ${generatedAnnexSortHeader('Fecha de creacion', 'creado_en')}
+            ${generatedAnnexSortHeader('Fecha de modificacion', 'actualizado_en')}
+            ${generatedAnnexSortHeader('Cliente', 'cliente')}
+            ${generatedAnnexSortHeader('Adquiriente', 'obligado')}
+            ${generatedAnnexSortHeader('Moneda', 'moneda')}
+            ${generatedAnnexSortHeader('Monto desc.', 'monto')}
+            ${generatedAnnexSortHeader('Estado', 'estado')}
             <th>Acciones</th>
           </tr>
         </thead>
@@ -2649,6 +2654,18 @@ function renderGeneratedAnnexes() {
     else state.annexSelectedIds.delete(input.dataset.selectAnnex);
     renderGeneratedAnnexes();
   }));
+  container.querySelectorAll('[data-sort-annex]').forEach((button) => button.addEventListener('click', () => {
+    const key = button.dataset.sortAnnex;
+    if (state.annexGeneratedColumnSort === key) {
+      state.annexGeneratedColumnDirection = state.annexGeneratedColumnDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.annexGeneratedColumnSort = key;
+      state.annexGeneratedColumnDirection = 'asc';
+    }
+    state.annexGeneratedPage = 1;
+    $('annex-generated-sort').value = '';
+    renderGeneratedAnnexes();
+  }));
   container.querySelector('#bulk-send-control')?.addEventListener('click', () => sendSelectedAnnexesToControl());
   container.querySelector('#bulk-cancel-annexes')?.addEventListener('click', () => cancelSelectedAnnexes());
   container.querySelector('#annex-generated-page-size')?.addEventListener('change', (event) => {
@@ -2711,8 +2728,41 @@ function filterGeneratedAnnexes(rows) {
   });
 }
 
+function generatedAnnexSortHeader(label, key) {
+  const active = state.annexGeneratedColumnSort === key;
+  const direction = active ? state.annexGeneratedColumnDirection : 'none';
+  const indicator = active ? (direction === 'asc' ? '▲' : '▼') : '↕';
+  return `<th aria-sort="${direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'}">
+    <button class="sortable-table-header ${active ? 'is-active' : ''}" type="button" data-sort-annex="${key}" title="Ordenar ${escapeAttr(label)}">
+      <span>${escapeHtml(label)}</span><span class="sort-indicator" aria-hidden="true">${indicator}</span>
+    </button>
+  </th>`;
+}
+
 function sortGeneratedAnnexes(rows) {
   const sorted = [...rows];
+  const column = state.annexGeneratedColumnSort;
+  if (column) {
+    const direction = state.annexGeneratedColumnDirection === 'desc' ? -1 : 1;
+    const collator = new Intl.Collator('es', { numeric: true, sensitivity: 'base' });
+    const valueFor = (row) => {
+      if (column === 'codigo') return annexCode(row);
+      if (column === 'creado_en') return Date.parse(row.creado_en || row.fecha_generacion || '') || 0;
+      if (column === 'actualizado_en') return Date.parse(row.actualizado_en || row.fecha_edicion_anexo || row.creado_en || row.fecha_generacion || '') || 0;
+      if (column === 'monto') return Number(row.total_monto_descontado || row.monto_descontado || row.monto_desembolsar) || 0;
+      if (column === 'estado') return row.estado_control || row.estado_validacion || row.estado || '';
+      return row[column] || '';
+    };
+    sorted.sort((a, b) => {
+      const left = valueFor(a);
+      const right = valueFor(b);
+      const comparison = typeof left === 'number' && typeof right === 'number'
+        ? left - right
+        : collator.compare(String(left), String(right));
+      return comparison * direction;
+    });
+    return sorted;
+  }
   const sort = state.annexGeneratedSort;
   sorted.sort((a, b) => {
     if (sort === 'fecha_asc') return String(a.fecha_generacion || '').localeCompare(String(b.fecha_generacion || ''));
